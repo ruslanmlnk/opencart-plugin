@@ -1,0 +1,244 @@
+{{ header }}
+{{ column_left }}
+<div id="content">
+  <div class="page-header">
+    <div class="container-fluid">
+      <div class="pull-right">
+        <button type="submit" form="form-prom-sync" data-toggle="tooltip" title="{{ button_save }}" class="btn btn-primary"><i class="fa fa-save"></i></button>
+        <a href="{{ cancel }}" data-toggle="tooltip" title="{{ button_cancel }}" class="btn btn-default"><i class="fa fa-reply"></i></a>
+      </div>
+      <h1>{{ heading_title }}</h1>
+      <ul class="breadcrumb">
+        {% for breadcrumb in breadcrumbs %}
+        <li><a href="{{ breadcrumb.href }}">{{ breadcrumb.text }}</a></li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+  <div class="container-fluid">
+    {% if error_warning %}
+    <div class="alert alert-danger"><i class="fa fa-exclamation-circle"></i> {{ error_warning }}
+      <button type="button" class="close" data-dismiss="alert">&times;</button>
+    </div>
+    {% endif %}
+    {% if success %}
+    <div class="alert alert-success"><i class="fa fa-check-circle"></i> {{ success }}
+      <button type="button" class="close" data-dismiss="alert">&times;</button>
+    </div>
+    {% endif %}
+    <div class="panel panel-default">
+      <div class="panel-heading">
+        <h3 class="panel-title"><i class="fa fa-pencil"></i> {{ text_edit }}</h3>
+      </div>
+      <div class="panel-body">
+        <form action="{{ action }}" method="post" enctype="multipart/form-data" id="form-prom-sync" class="form-horizontal">
+          <div class="form-group">
+            <label class="col-sm-2 control-label" for="input-status">{{ entry_status }}</label>
+            <div class="col-sm-10">
+              <select name="module_prom_sync_status" id="input-status" class="form-control">
+                {% if module_prom_sync_status %}
+                <option value="1" selected="selected">{{ text_enabled }}</option>
+                <option value="0">{{ text_disabled }}</option>
+                {% else %}
+                <option value="1">{{ text_enabled }}</option>
+                <option value="0" selected="selected">{{ text_disabled }}</option>
+                {% endif %}
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group required">
+            <label class="col-sm-2 control-label" for="input-token">{{ entry_token }}</label>
+            <div class="col-sm-10">
+              <input type="text" name="module_prom_sync_token" value="{{ module_prom_sync_token }}" placeholder="{{ entry_token }}" id="input-token" class="form-control" />
+              {% if error_token %}
+              <div class="text-danger">{{ error_token }}</div>
+              {% endif %}
+              <p class="help-block">{{ help_token }}</p>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="col-sm-2 control-label" for="input-domain">{{ entry_domain }}</label>
+            <div class="col-sm-10">
+              <input type="text" name="module_prom_sync_domain" value="{{ module_prom_sync_domain }}" placeholder="prom.ua" id="input-domain" class="form-control" />
+              <p class="help-block">{{ help_domain }}</p>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="col-sm-2 control-label" for="input-language">{{ entry_language }}</label>
+            <div class="col-sm-10">
+              <select name="module_prom_sync_language" id="input-language" class="form-control">
+                <option value="uk" {% if module_prom_sync_language == 'uk' %}selected="selected"{% endif %}>uk</option>
+                <option value="ru" {% if module_prom_sync_language == 'ru' %}selected="selected"{% endif %}>ru</option>
+                <option value="en" {% if module_prom_sync_language == 'en' %}selected="selected"{% endif %}>en</option>
+              </select>
+              <p class="help-block">{{ help_language }}</p>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="col-sm-2 control-label" for="input-default-category">{{ entry_default_category }}</label>
+            <div class="col-sm-10">
+              <input type="text" name="module_prom_sync_default_category_id" value="{{ module_prom_sync_default_category_id }}" placeholder="0" id="input-default-category" class="form-control" />
+              <p class="help-block">{{ help_default_category }}</p>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="col-sm-2 control-label">{{ entry_map_groups }}</label>
+            <div class="col-sm-10">
+              <select name="module_prom_sync_map_groups" class="form-control">
+                <option value="1" {% if module_prom_sync_map_groups %}selected="selected"{% endif %}>{{ text_yes }}</option>
+                <option value="0" {% if not module_prom_sync_map_groups %}selected="selected"{% endif %}>{{ text_no }}</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="col-sm-2 control-label">{{ entry_create_categories }}</label>
+            <div class="col-sm-10">
+              <select name="module_prom_sync_create_categories" class="form-control">
+                <option value="1" {% if module_prom_sync_create_categories %}selected="selected"{% endif %}>{{ text_yes }}</option>
+                <option value="0" {% if not module_prom_sync_create_categories %}selected="selected"{% endif %}>{{ text_no }}</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="col-sm-2 control-label">{{ entry_update_existing }}</label>
+            <div class="col-sm-10">
+              <select name="module_prom_sync_update_existing" class="form-control">
+                <option value="1" {% if module_prom_sync_update_existing %}selected="selected"{% endif %}>{{ text_yes }}</option>
+                <option value="0" {% if not module_prom_sync_update_existing %}selected="selected"{% endif %}>{{ text_no }}</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="col-sm-2 control-label">{{ entry_map_name }}</label>
+            <div class="col-sm-10">
+              <select name="module_prom_sync_map_name" class="form-control">
+                <option value="1" {% if module_prom_sync_map_name %}selected="selected"{% endif %}>{{ text_yes }}</option>
+                <option value="0" {% if not module_prom_sync_map_name %}selected="selected"{% endif %}>{{ text_no }}</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="col-sm-2 control-label">{{ entry_map_description }}</label>
+            <div class="col-sm-10">
+              <select name="module_prom_sync_map_description" class="form-control">
+                <option value="1" {% if module_prom_sync_map_description %}selected="selected"{% endif %}>{{ text_yes }}</option>
+                <option value="0" {% if not module_prom_sync_map_description %}selected="selected"{% endif %}>{{ text_no }}</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="col-sm-2 control-label">{{ entry_map_price }}</label>
+            <div class="col-sm-10">
+              <select name="module_prom_sync_map_price" class="form-control">
+                <option value="1" {% if module_prom_sync_map_price %}selected="selected"{% endif %}>{{ text_yes }}</option>
+                <option value="0" {% if not module_prom_sync_map_price %}selected="selected"{% endif %}>{{ text_no }}</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="col-sm-2 control-label">{{ entry_map_quantity }}</label>
+            <div class="col-sm-10">
+              <select name="module_prom_sync_map_quantity" class="form-control">
+                <option value="1" {% if module_prom_sync_map_quantity %}selected="selected"{% endif %}>{{ text_yes }}</option>
+                <option value="0" {% if not module_prom_sync_map_quantity %}selected="selected"{% endif %}>{{ text_no }}</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="col-sm-2 control-label">{{ entry_map_sku }}</label>
+            <div class="col-sm-10">
+              <select name="module_prom_sync_map_sku" class="form-control">
+                <option value="1" {% if module_prom_sync_map_sku %}selected="selected"{% endif %}>{{ text_yes }}</option>
+                <option value="0" {% if not module_prom_sync_map_sku %}selected="selected"{% endif %}>{{ text_no }}</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="col-sm-2 control-label">{{ entry_map_images }}</label>
+            <div class="col-sm-10">
+              <select name="module_prom_sync_map_images" class="form-control">
+                <option value="1" {% if module_prom_sync_map_images %}selected="selected"{% endif %}>{{ text_yes }}</option>
+                <option value="0" {% if not module_prom_sync_map_images %}selected="selected"{% endif %}>{{ text_no }}</option>
+              </select>
+            </div>
+          </div>
+
+          <hr />
+
+          <div class="form-group">
+            <label class="col-sm-2 control-label">{{ entry_push_stock }}</label>
+            <div class="col-sm-10">
+              <select name="module_prom_sync_push_stock" class="form-control">
+                <option value="1" {% if module_prom_sync_push_stock %}selected="selected"{% endif %}>{{ text_yes }}</option>
+                <option value="0" {% if not module_prom_sync_push_stock %}selected="selected"{% endif %}>{{ text_no }}</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="col-sm-2 control-label">{{ entry_pull_orders }}</label>
+            <div class="col-sm-10">
+              <select name="module_prom_sync_pull_orders" class="form-control">
+                <option value="1" {% if module_prom_sync_pull_orders %}selected="selected"{% endif %}>{{ text_yes }}</option>
+                <option value="0" {% if not module_prom_sync_pull_orders %}selected="selected"{% endif %}>{{ text_no }}</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="col-sm-2 control-label">{{ entry_match_by_sku }}</label>
+            <div class="col-sm-10">
+              <select name="module_prom_sync_match_by_sku" class="form-control">
+                <option value="1" {% if module_prom_sync_match_by_sku %}selected="selected"{% endif %}>{{ text_yes }}</option>
+                <option value="0" {% if not module_prom_sync_match_by_sku %}selected="selected"{% endif %}>{{ text_no }}</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="col-sm-2 control-label" for="input-limit">{{ entry_limit }}</label>
+            <div class="col-sm-10">
+              <input type="text" name="module_prom_sync_limit" value="{{ module_prom_sync_limit }}" placeholder="50" id="input-limit" class="form-control" />
+              <p class="help-block">{{ help_limit }}</p>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="col-sm-2 control-label" for="input-cron-key">{{ entry_cron_key }}</label>
+            <div class="col-sm-10">
+              <input type="text" name="module_prom_sync_cron_key" value="{{ module_prom_sync_cron_key }}" id="input-cron-key" class="form-control" />
+              <p class="help-block">{{ help_cron_key }}</p>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="col-sm-2 control-label">Cron URL</label>
+            <div class="col-sm-10">
+              <input type="text" value="{{ cron_url }}" class="form-control" readonly="readonly" />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <div class="col-sm-10 col-sm-offset-2">
+              <a href="{{ action_import }}" class="btn btn-info">{{ button_import }}</a>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{{ footer }}
