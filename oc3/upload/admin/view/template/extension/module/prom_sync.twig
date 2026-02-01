@@ -1,0 +1,502 @@
+{{ header }}{{ column_left }}
+<div id="content" class="prom-sync">
+  <style type="text/css">
+    .prom-sync .page-header { margin-bottom: 20px; }
+    .prom-sync .btn-default { background: #f8f9fa; border-color: #e5e7eb; color: #374151; }
+    .prom-sync .btn-default:hover { background: #f1f5f9; }
+    .prom-sync .ps-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+    .prom-sync .ps-card-header { padding: 16px 20px; border-bottom: 1px solid #eef2f7; display: flex; align-items: center; gap: 8px; font-weight: 600; }
+    .prom-sync .ps-card-body { padding: 20px; }
+    .prom-sync .nav-tabs { border-bottom: 1px solid #e5e7eb; margin-bottom: 20px; }
+    .prom-sync .nav-tabs > li > a { border: 0; border-bottom: 2px solid transparent; margin-right: 12px; color: #6b7280; }
+    .prom-sync .nav-tabs > li.active > a,
+    .prom-sync .nav-tabs > li.active > a:focus,
+    .prom-sync .nav-tabs > li.active > a:hover { border: 0; border-bottom: 2px solid #0d6efd; color: #0d6efd; background: transparent; }
+    .prom-sync .tab-content { padding-top: 4px; }
+    .prom-sync .ps-section { background: #fafafa; border: 1px solid #edf2f7; border-radius: 10px; padding: 16px; margin-bottom: 20px; }
+    .prom-sync .ps-section-title { font-weight: 600; margin: 0 0 12px; color: #111827; }
+    .prom-sync .help-block { color: #6b7280; font-size: 12px; }
+    .prom-sync .alert { border-radius: 8px; }
+    .prom-sync .progress { height: 10px; border-radius: 999px; background: #e5e7eb; }
+    .prom-sync .progress-bar { background: #0d6efd; }
+    .prom-sync .ps-switch { position: relative; display: inline-block; width: 46px; height: 24px; vertical-align: middle; }
+    .prom-sync .ps-switch input { opacity: 0; width: 0; height: 0; }
+    .prom-sync .ps-slider { position: absolute; cursor: pointer; inset: 0; background: #d1d5db; transition: .2s; border-radius: 999px; }
+    .prom-sync .ps-slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; top: 3px; background: #fff; transition: .2s; border-radius: 50%; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+    .prom-sync .ps-switch input:checked + .ps-slider { background: #0d6efd; }
+    .prom-sync .ps-switch input:checked + .ps-slider:before { transform: translateX(22px); }
+    .prom-sync .ps-switch-text { margin-left: 8px; color: #6b7280; font-size: 12px; }
+    .prom-sync .ps-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  </style>
+
+  <div class="page-header">
+    <div class="container-fluid">
+      <div class="pull-right">
+        <button type="submit" form="form-prom-sync" data-toggle="tooltip" title="{{ button_save }}" class="btn btn-primary"><i class="fa fa-save"></i></button>
+        <a href="{{ back }}" data-toggle="tooltip" title="{{ button_back }}" class="btn btn-default"><i class="fa fa-reply"></i></a>
+      </div>
+      <h1>{{ heading_title }}</h1>
+      <ul class="breadcrumb">
+        {% for breadcrumb in breadcrumbs %}
+          <li><a href="{{ breadcrumb.href }}">{{ breadcrumb.text }}</a></li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+
+  <div class="container-fluid">
+    {% if error_warning %}
+      <div class="alert alert-danger"><i class="fa fa-exclamation-circle"></i> {{ error_warning }}
+        <button type="button" class="close" data-dismiss="alert">&times;</button>
+      </div>
+    {% endif %}
+    {% if success %}
+      <div class="alert alert-success"><i class="fa fa-check-circle"></i> {{ success }}
+        <button type="button" class="close" data-dismiss="alert">&times;</button>
+      </div>
+    {% endif %}
+
+    <div class="ps-card">
+      <div class="ps-card-header"><i class="fa fa-plug"></i> {{ text_edit }}</div>
+      <div class="ps-card-body">
+        <form id="form-prom-sync" action="{{ action }}" method="post" enctype="multipart/form-data" class="form-horizontal">
+          <ul class="nav nav-tabs">
+            <li class="active"><a href="#tab-general" data-toggle="tab">{{ text_tab_general }}</a></li>
+            <li><a href="#tab-import" data-toggle="tab">{{ text_tab_import }}</a></li>
+            <li><a href="#tab-sync" data-toggle="tab">{{ text_tab_sync }}</a></li>
+            <li><a href="#tab-logs" data-toggle="tab">{{ text_tab_logs }}</a></li>
+          </ul>
+
+          <div class="tab-content">
+            <div class="tab-pane active" id="tab-general">
+              <div class="ps-section">
+                <div class="ps-section-title">{{ text_section_connection }}</div>
+
+                <div class="form-group">
+                  <label class="col-sm-2 control-label">{{ entry_status }}</label>
+                  <div class="col-sm-10">
+                    <input type="hidden" name="module_prom_sync_status" value="0" />
+                    <label class="ps-switch">
+                      <input type="checkbox" name="module_prom_sync_status" value="1" id="input-status" {% if module_prom_sync_status %}checked="checked"{% endif %} />
+                      <span class="ps-slider"></span>
+                    </label>
+                    <span class="ps-switch-text">{{ text_enabled }}</span>
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label class="col-sm-2 control-label" for="input-token">{{ entry_token }}</label>
+                  <div class="col-sm-10">
+                    <input type="text" name="module_prom_sync_token" value="{{ module_prom_sync_token }}" placeholder="{{ entry_token }}" id="input-token" class="form-control" />
+                    {% if error_token %}
+                      <div class="text-danger">{{ error_token }}</div>
+                    {% endif %}
+                    <p class="help-block">{{ help_token }}</p>
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label class="col-sm-2 control-label" for="input-domain">{{ entry_domain }}</label>
+                  <div class="col-sm-10">
+                    <input type="text" name="module_prom_sync_domain" value="{{ module_prom_sync_domain }}" placeholder="prom.ua" id="input-domain" class="form-control" />
+                    <p class="help-block">{{ help_domain }}</p>
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label class="col-sm-2 control-label" for="input-language">{{ entry_language }}</label>
+                  <div class="col-sm-10">
+                    <select name="module_prom_sync_language" id="input-language" class="form-control">
+                      <option value="uk" {% if module_prom_sync_language == 'uk' %}selected="selected"{% endif %}>uk</option>
+                      <option value="ru" {% if module_prom_sync_language == 'ru' %}selected="selected"{% endif %}>ru</option>
+                      <option value="en" {% if module_prom_sync_language == 'en' %}selected="selected"{% endif %}>en</option>
+                    </select>
+                    <p class="help-block">{{ help_language }}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="tab-pane" id="tab-import">
+              <div class="ps-section">
+                <div class="ps-section-title">{{ text_section_import }}</div>
+
+                <div class="form-group">
+                  <label class="col-sm-2 control-label" for="input-default-category">{{ entry_default_category }}</label>
+                  <div class="col-sm-10">
+                    <input type="number" name="module_prom_sync_default_category_id" value="{{ module_prom_sync_default_category_id }}" placeholder="0" id="input-default-category" class="form-control" min="0" step="1" />
+                    <p class="help-block">{{ help_default_category }}</p>
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label class="col-sm-2 control-label" for="input-limit">{{ entry_limit }}</label>
+                  <div class="col-sm-10">
+                    <input type="number" name="module_prom_sync_limit" value="{{ module_prom_sync_limit }}" placeholder="50" id="input-limit" class="form-control" min="1" step="1" />
+                    <p class="help-block">{{ help_limit }}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div class="ps-section">
+                <div class="ps-section-title">{{ text_section_mapping }}</div>
+
+                <div class="row">
+                  <div class="col-sm-6">
+                    <div class="form-group">
+                      <label class="col-sm-8 control-label">{{ entry_map_name }}</label>
+                      <div class="col-sm-4">
+                        <input type="hidden" name="module_prom_sync_map_name" value="0" />
+                        <label class="ps-switch">
+                          <input type="checkbox" name="module_prom_sync_map_name" value="1" {% if module_prom_sync_map_name %}checked="checked"{% endif %} />
+                          <span class="ps-slider"></span>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div class="form-group">
+                      <label class="col-sm-8 control-label">{{ entry_map_description }}</label>
+                      <div class="col-sm-4">
+                        <input type="hidden" name="module_prom_sync_map_description" value="0" />
+                        <label class="ps-switch">
+                          <input type="checkbox" name="module_prom_sync_map_description" value="1" {% if module_prom_sync_map_description %}checked="checked"{% endif %} />
+                          <span class="ps-slider"></span>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div class="form-group">
+                      <label class="col-sm-8 control-label">{{ entry_map_price }}</label>
+                      <div class="col-sm-4">
+                        <input type="hidden" name="module_prom_sync_map_price" value="0" />
+                        <label class="ps-switch">
+                          <input type="checkbox" name="module_prom_sync_map_price" value="1" {% if module_prom_sync_map_price %}checked="checked"{% endif %} />
+                          <span class="ps-slider"></span>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div class="form-group">
+                      <label class="col-sm-8 control-label">{{ entry_map_quantity }}</label>
+                      <div class="col-sm-4">
+                        <input type="hidden" name="module_prom_sync_map_quantity" value="0" />
+                        <label class="ps-switch">
+                          <input type="checkbox" name="module_prom_sync_map_quantity" value="1" {% if module_prom_sync_map_quantity %}checked="checked"{% endif %} />
+                          <span class="ps-slider"></span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="col-sm-6">
+                    <div class="form-group">
+                      <label class="col-sm-8 control-label">{{ entry_map_sku }}</label>
+                      <div class="col-sm-4">
+                        <input type="hidden" name="module_prom_sync_map_sku" value="0" />
+                        <label class="ps-switch">
+                          <input type="checkbox" name="module_prom_sync_map_sku" value="1" {% if module_prom_sync_map_sku %}checked="checked"{% endif %} />
+                          <span class="ps-slider"></span>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div class="form-group">
+                      <label class="col-sm-8 control-label">{{ entry_map_images }}</label>
+                      <div class="col-sm-4">
+                        <input type="hidden" name="module_prom_sync_map_images" value="0" />
+                        <label class="ps-switch">
+                          <input type="checkbox" name="module_prom_sync_map_images" value="1" {% if module_prom_sync_map_images %}checked="checked"{% endif %} />
+                          <span class="ps-slider"></span>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div class="form-group">
+                      <label class="col-sm-8 control-label">{{ entry_map_groups }}</label>
+                      <div class="col-sm-4">
+                        <input type="hidden" name="module_prom_sync_map_groups" value="0" />
+                        <label class="ps-switch">
+                          <input type="checkbox" name="module_prom_sync_map_groups" value="1" {% if module_prom_sync_map_groups %}checked="checked"{% endif %} />
+                          <span class="ps-slider"></span>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div class="form-group">
+                      <label class="col-sm-8 control-label">{{ entry_create_categories }}</label>
+                      <div class="col-sm-4">
+                        <input type="hidden" name="module_prom_sync_create_categories" value="0" />
+                        <label class="ps-switch">
+                          <input type="checkbox" name="module_prom_sync_create_categories" value="1" {% if module_prom_sync_create_categories %}checked="checked"{% endif %} />
+                          <span class="ps-slider"></span>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div class="form-group">
+                      <label class="col-sm-8 control-label">{{ entry_update_existing }}</label>
+                      <div class="col-sm-4">
+                        <input type="hidden" name="module_prom_sync_update_existing" value="0" />
+                        <label class="ps-switch">
+                          <input type="checkbox" name="module_prom_sync_update_existing" value="1" {% if module_prom_sync_update_existing %}checked="checked"{% endif %} />
+                          <span class="ps-slider"></span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="ps-section">
+                <div class="ps-section-title">{{ entry_country_ru }} / {{ entry_country_uk }}</div>
+                <div class="form-group">
+                  <label class="col-sm-2 control-label" for="input-country-ru">{{ entry_country_ru }}</label>
+                  <div class="col-sm-10">
+                    <input type="text" name="module_prom_sync_country_ru" value="{{ module_prom_sync_country_ru }}" id="input-country-ru" class="form-control" />
+                    <p class="help-block">{{ help_country }}</p>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label class="col-sm-2 control-label" for="input-country-uk">{{ entry_country_uk }}</label>
+                  <div class="col-sm-10">
+                    <input type="text" name="module_prom_sync_country_uk" value="{{ module_prom_sync_country_uk }}" id="input-country-uk" class="form-control" />
+                  </div>
+                </div>
+              </div>
+
+              <div class="ps-section">
+                <div class="ps-section-title">{{ text_section_actions }}</div>
+                <p class="text-muted">{{ text_import_note }}</p>
+                <div class="ps-actions">
+                  <button type="button" id="button-import" class="btn btn-primary" data-import-url="{{ action_import_batch }}"><i class="fa fa-download"></i> {{ button_import }}</button>
+                </div>
+
+                <div id="import-progress" class="hidden" style="margin-top: 15px;">
+                  <div id="import-progress-bar-wrap" class="progress progress-striped active">
+                    <div id="import-progress-bar" class="progress-bar" role="progressbar" style="width: 0%">0%</div>
+                  </div>
+                  <div id="import-progress-text" class="help-block">{{ text_import_progress }}: 0</div>
+                </div>
+                <div id="import-alert" class="alert alert-danger hidden" style="margin-top: 15px;"></div>
+                <div id="import-success" class="alert alert-success hidden" style="margin-top: 15px;"></div>
+              </div>
+            </div>
+
+            <div class="tab-pane" id="tab-sync">
+              <div class="ps-section">
+                <div class="ps-section-title">{{ text_section_sync }}</div>
+
+                <div class="form-group">
+                  <label class="col-sm-4 control-label">{{ entry_push_stock }}</label>
+                  <div class="col-sm-8">
+                    <input type="hidden" name="module_prom_sync_push_stock" value="0" />
+                    <label class="ps-switch">
+                      <input type="checkbox" name="module_prom_sync_push_stock" value="1" {% if module_prom_sync_push_stock %}checked="checked"{% endif %} />
+                      <span class="ps-slider"></span>
+                    </label>
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label class="col-sm-4 control-label">{{ entry_pull_orders }}</label>
+                  <div class="col-sm-8">
+                    <input type="hidden" name="module_prom_sync_pull_orders" value="0" />
+                    <label class="ps-switch">
+                      <input type="checkbox" name="module_prom_sync_pull_orders" value="1" {% if module_prom_sync_pull_orders %}checked="checked"{% endif %} />
+                      <span class="ps-slider"></span>
+                    </label>
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label class="col-sm-4 control-label">{{ entry_match_by_sku }}</label>
+                  <div class="col-sm-8">
+                    <input type="hidden" name="module_prom_sync_match_by_sku" value="0" />
+                    <label class="ps-switch">
+                      <input type="checkbox" name="module_prom_sync_match_by_sku" value="1" {% if module_prom_sync_match_by_sku %}checked="checked"{% endif %} />
+                      <span class="ps-slider"></span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div class="ps-section">
+                <div class="ps-section-title">{{ text_section_cron }}</div>
+                <p class="text-muted">{{ text_cron_note }}</p>
+
+                <div class="form-group">
+                  <label class="col-sm-2 control-label" for="input-cron-key">{{ entry_cron_key }}</label>
+                  <div class="col-sm-10">
+                    <input type="text" name="module_prom_sync_cron_key" value="{{ module_prom_sync_cron_key }}" id="input-cron-key" class="form-control" />
+                    <p class="help-block">{{ help_cron_key }}</p>
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label class="col-sm-2 control-label" for="input-cron-url">{{ entry_cron_url }}</label>
+                  <div class="col-sm-10">
+                    <div class="input-group">
+                      <input type="text" value="{{ cron_url }}" id="input-cron-url" class="form-control" readonly="readonly" />
+                      <span class="input-group-btn">
+                        <button type="button" id="button-copy-cron" data-toggle="tooltip" title="{{ button_copy }}" class="btn btn-default"><i class="fa fa-copy"></i></button>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="tab-pane" id="tab-logs">
+              <div class="ps-section">
+                <div class="ps-section-title">{{ text_section_logs }}</div>
+                <p class="text-muted">{{ text_logs_note }}</p>
+                <textarea class="form-control" style="min-height: 320px; font-family: monospace;" readonly>{{ log_content }}</textarea>
+              </div>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+<script type="text/javascript"><!--
+$('#button-copy-cron').on('click', function() {
+    var copyText = document.getElementById('input-cron-url');
+
+    copyText.select();
+    copyText.setSelectionRange(0, 99999);
+
+    try {
+        document.execCommand('copy');
+    } catch (e) {}
+});
+
+(function() {
+    var button = $('#button-import');
+    if (!button.length) {
+        return;
+    }
+
+    var progressWrap = $('#import-progress');
+    var progressBarWrap = $('#import-progress-bar-wrap');
+    var progressBar = $('#import-progress-bar');
+    var progressText = $('#import-progress-text');
+    var alertBox = $('#import-alert');
+    var successBox = $('#import-success');
+    var textProgress = '{{ text_import_progress }}';
+    var textComplete = '{{ text_import_complete }}';
+    var textError = '{{ text_import_error }}';
+
+    function setMessage(el, message) {
+        if (!el || !el.length) {
+            return;
+        }
+        if (message) {
+            el.text(message).removeClass('hidden');
+        } else {
+            el.addClass('hidden');
+        }
+    }
+
+    function setProgress(processed, total, done) {
+        var percent = 0;
+        if (total && total > 0) {
+            percent = Math.min(100, Math.round((processed / total) * 100));
+        } else if (done) {
+            percent = 100;
+        }
+
+        progressBar.css('width', percent + '%');
+        progressBar.text((total && total > 0) ? (percent + '%') : (done ? '100%' : ''));
+
+        if (done) {
+            progressBarWrap.removeClass('active progress-striped');
+        } else {
+            progressBarWrap.addClass('progress-striped active');
+        }
+
+        var text = textProgress + ': ' + processed;
+        if (total && total > 0) {
+            text += ' / ' + total;
+        }
+        progressText.text(text);
+    }
+
+    function runBatch(state) {
+        var data = {};
+        if (state.last_id !== null && state.last_id !== undefined && state.last_id !== '') {
+            data.last_id = state.last_id;
+        }
+
+        $.ajax({
+            url: button.data('importUrl'),
+            type: 'post',
+            data: data,
+            dataType: 'json'
+        }).done(function(json) {
+            if (json.error) {
+                setMessage(alertBox, json.error || textError);
+                button.prop('disabled', false);
+                progressBarWrap.removeClass('active');
+                return;
+            }
+
+            var batchProcessed = json.batch_processed;
+            if (batchProcessed === undefined) {
+                batchProcessed = (json.imported || 0) + (json.updated || 0) + (json.skipped || 0) + (json.errors || 0);
+            }
+
+            state.processed += batchProcessed;
+            state.imported += json.imported || 0;
+            state.updated += json.updated || 0;
+            state.skipped += json.skipped || 0;
+            state.errors += json.errors || 0;
+
+            if (json.total && json.total > 0) {
+                state.total = json.total;
+            }
+
+            state.last_id = (json.next_last_id !== undefined) ? json.next_last_id : null;
+
+            setProgress(state.processed, state.total, json.done);
+
+            if (json.done) {
+                button.prop('disabled', false);
+                progressBarWrap.removeClass('active');
+                setMessage(successBox, textComplete + ' Imported: ' + state.imported + ', Updated: ' + state.updated + ', Skipped: ' + state.skipped + ', Errors: ' + state.errors);
+            } else {
+                runBatch(state);
+            }
+        }).fail(function() {
+            setMessage(alertBox, textError);
+            button.prop('disabled', false);
+            progressBarWrap.removeClass('active');
+        });
+    }
+
+    button.on('click', function() {
+        if (button.prop('disabled')) {
+            return;
+        }
+
+        button.prop('disabled', true);
+        setMessage(alertBox, '');
+        setMessage(successBox, '');
+        progressWrap.removeClass('hidden');
+
+        var state = {
+            processed: 0,
+            imported: 0,
+            updated: 0,
+            skipped: 0,
+            errors: 0,
+            total: 0,
+            last_id: null
+        };
+
+        setProgress(0, 0, false);
+        runBatch(state);
+    });
+})();
+//--></script>
+{{ footer }}

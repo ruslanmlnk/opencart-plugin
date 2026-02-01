@@ -213,7 +213,15 @@
               <fieldset class="mb-2">
                 <legend class="h6">{{ text_section_actions }}</legend>
                 <p class="text-muted">{{ text_import_note }}</p>
-                <a href="{{ action_import }}" class="btn btn-outline-primary"><i class="fa-solid fa-download"></i> {{ button_import }}</a>
+                <button type="button" id="button-import" class="btn btn-outline-primary" data-import-url="{{ action_import_batch }}"><i class="fa-solid fa-download"></i> {{ button_import }}</button>
+                <div id="import-progress" class="mt-3 d-none">
+                  <div class="progress">
+                    <div id="import-progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%">0%</div>
+                  </div>
+                  <div id="import-progress-text" class="small text-muted mt-2">{{ text_import_progress }}: 0</div>
+                </div>
+                <div id="import-alert" class="alert alert-danger d-none mt-3"></div>
+                <div id="import-success" class="alert alert-success d-none mt-3"></div>
               </fieldset>
             </div>
 
@@ -290,5 +298,135 @@ $('#button-copy-cron').on('click', function() {
 
     navigator.clipboard.writeText(copyText.value);
 });
+
+(function() {
+    var button = document.getElementById('button-import');
+    if (!button) {
+        return;
+    }
+
+    var progressWrap = document.getElementById('import-progress');
+    var progressBar = document.getElementById('import-progress-bar');
+    var progressText = document.getElementById('import-progress-text');
+    var alertBox = document.getElementById('import-alert');
+    var successBox = document.getElementById('import-success');
+    var textProgress = '{{ text_import_progress }}';
+    var textComplete = '{{ text_import_complete }}';
+    var textError = '{{ text_import_error }}';
+
+    function setMessage(el, message) {
+        if (!el) {
+            return;
+        }
+        if (message) {
+            el.textContent = message;
+            el.classList.remove('d-none');
+        } else {
+            el.classList.add('d-none');
+        }
+    }
+
+    function setProgress(processed, total, done) {
+        var percent = 0;
+        if (total && total > 0) {
+            percent = Math.min(100, Math.round((processed / total) * 100));
+        } else if (done) {
+            percent = 100;
+        }
+
+        progressBar.style.width = percent + '%';
+        progressBar.textContent = (total && total > 0) ? percent + '%' : (done ? '100%' : '');
+
+        if (done) {
+            progressBar.classList.remove('progress-bar-animated');
+        } else {
+            progressBar.classList.add('progress-bar-striped', 'progress-bar-animated');
+        }
+
+        var text = textProgress + ': ' + processed;
+        if (total && total > 0) {
+            text += ' / ' + total;
+        }
+        progressText.textContent = text;
+    }
+
+    function runBatch(state) {
+        var formData = new FormData();
+        if (state.last_id !== null && state.last_id !== undefined && state.last_id !== '') {
+            formData.append('last_id', state.last_id);
+        }
+
+        fetch(button.dataset.importUrl, {
+            method: 'POST',
+            body: formData,
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(function(response) { return response.json(); })
+        .then(function(json) {
+            if (json.error) {
+                setMessage(alertBox, json.error || textError);
+                button.disabled = false;
+                progressBar.classList.remove('progress-bar-animated');
+                return;
+            }
+
+            var batchProcessed = json.batch_processed;
+            if (batchProcessed === undefined) {
+                batchProcessed = (json.imported || 0) + (json.updated || 0) + (json.skipped || 0) + (json.errors || 0);
+            }
+
+            state.processed += batchProcessed;
+            state.imported += json.imported || 0;
+            state.updated += json.updated || 0;
+            state.skipped += json.skipped || 0;
+            state.errors += json.errors || 0;
+
+            if (json.total && json.total > 0) {
+                state.total = json.total;
+            }
+
+            state.last_id = (json.next_last_id !== undefined) ? json.next_last_id : null;
+
+            setProgress(state.processed, state.total, json.done);
+
+            if (json.done) {
+                button.disabled = false;
+                progressBar.classList.remove('progress-bar-animated');
+                setMessage(successBox, textComplete + ' Imported: ' + state.imported + ', Updated: ' + state.updated + ', Skipped: ' + state.skipped + ', Errors: ' + state.errors);
+            } else {
+                runBatch(state);
+            }
+        })
+        .catch(function() {
+            setMessage(alertBox, textError);
+            button.disabled = false;
+            progressBar.classList.remove('progress-bar-animated');
+        });
+    }
+
+    button.addEventListener('click', function() {
+        if (button.disabled) {
+            return;
+        }
+
+        button.disabled = true;
+        setMessage(alertBox, '');
+        setMessage(successBox, '');
+        progressWrap.classList.remove('d-none');
+
+        var state = {
+            processed: 0,
+            imported: 0,
+            updated: 0,
+            skipped: 0,
+            errors: 0,
+            total: 0,
+            last_id: null
+        };
+
+        setProgress(0, 0, false);
+        runBatch(state);
+    });
+})();
 //--></script>
 {{ footer }}

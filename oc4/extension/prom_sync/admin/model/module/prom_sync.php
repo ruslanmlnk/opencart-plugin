@@ -50,12 +50,21 @@ class PromSync extends \Opencart\System\Engine\Model {
             'status' => 1,
             'sort_order' => 2
         ));
+        $this->model_setting_event->addEvent(array(
+            'code' => 'prom_sync_product_list',
+            'description' => 'PromSync: add product sync action',
+            'trigger' => 'view/catalog/product_list/before',
+            'action' => 'extension/prom_sync/product.list',
+            'status' => 1,
+            'sort_order' => 3
+        ));
     }
 
     public function uninstall(): void {
         $this->load->model('setting/event');
         $this->model_setting_event->deleteEventByCode('prom_sync_order_history');
         $this->model_setting_event->deleteEventByCode('prom_sync_menu');
+        $this->model_setting_event->deleteEventByCode('prom_sync_product_list');
 
         $this->db->query("DROP TABLE IF EXISTS `" . DB_PREFIX . "prom_sync_product`");
         $this->db->query("DROP TABLE IF EXISTS `" . DB_PREFIX . "prom_sync_group`");
@@ -147,6 +156,125 @@ class PromSync extends \Opencart\System\Engine\Model {
         return $summary;
     }
 
+    public function importProductsBatch(array $options = array()) {
+        $settings = $this->getSettings();
+        $api = $this->getApi($settings);
+
+        $limit = isset($options['limit']) ? (int)$options['limit'] : (int)$settings['limit'];
+        if ($limit <= 0) {
+            $limit = 50;
+        }
+
+        $query = array('limit' => $limit);
+        if (isset($options['last_id']) && $options['last_id'] !== '' && $options['last_id'] !== null) {
+            $query['last_id'] = (int)$options['last_id'];
+        }
+        if (!empty($options['group_id'])) {
+            $query['group_id'] = (int)$options['group_id'];
+        }
+        if (!empty($options['last_modified_from'])) {
+            $query['last_modified_from'] = $options['last_modified_from'];
+        }
+
+        $response = $api->get('/products/list', $query);
+        if (!$response['success']) {
+            $this->log->write('PromSync: API error on products/list: ' . $response['error']);
+            return array(
+                'success' => false,
+                'error' => $response['error'] ?: 'API error'
+            );
+        }
+
+        $data = is_array($response['data']) ? $response['data'] : array();
+        $products = (!empty($data['products']) && is_array($data['products'])) ? $data['products'] : array();
+        $total = $this->extractTotalFromResponse($data, $products);
+
+        $imported = 0;
+        $updated = 0;
+        $skipped = 0;
+        $errors = 0;
+        $min_id = null;
+
+        $languages = $this->getLanguages();
+        $default_category_id = (int)$settings['default_category_id'];
+
+        foreach ($products as $prom_product) {
+            if (!isset($prom_product['id'])) {
+                $errors++;
+                continue;
+            }
+
+            $prom_id = (int)$prom_product['id'];
+            if ($min_id === null || $prom_id < $min_id) {
+                $min_id = $prom_id;
+            }
+
+            $result = $this->importProduct($prom_product, $settings, $languages, $default_category_id);
+            if ($result === 'imported') {
+                $imported++;
+            } elseif ($result === 'updated') {
+                $updated++;
+            } elseif ($result === 'skipped') {
+                $skipped++;
+            } else {
+                $errors++;
+            }
+        }
+
+        $next_last_id = null;
+        $done = true;
+
+        if ($min_id !== null) {
+            $next_last_id = $min_id - 1;
+        }
+
+        if ($next_last_id !== null && $next_last_id > 0 && count($products) == $limit) {
+            $done = false;
+        }
+
+        return array(
+            'success' => true,
+            'imported' => $imported,
+            'updated' => $updated,
+            'skipped' => $skipped,
+            'errors' => $errors,
+            'batch_processed' => $imported + $updated + $skipped + $errors,
+            'next_last_id' => $next_last_id,
+            'done' => $done,
+            'total' => $total
+        );
+    }
+
+    public function syncProductByOcId($oc_product_id) {
+        if (!$this->config->get('module_prom_sync_status')) {
+            return array('success' => false, 'error' => 'PromSync: module disabled');
+        }
+
+        $mapping = $this->getProductMappingByOcId((int)$oc_product_id);
+        if (!$mapping || empty($mapping['prom_product_id'])) {
+            return array('success' => false, 'error' => 'PromSync: product not mapped to Prom');
+        }
+
+        $quantity = $this->getProductQuantity((int)$oc_product_id);
+        $items = array(
+            array(
+                'id' => (int)$mapping['prom_product_id'],
+                'quantity_in_stock' => (int)$quantity,
+                'in_stock' => $quantity > 0,
+                'presence' => $quantity > 0 ? 'available' : 'not_available'
+            )
+        );
+
+        $api = $this->getApi($this->getSettings());
+        $response = $api->post('/products/edit', $items);
+        if (!$response['success']) {
+            $this->log->write('PromSync: failed to sync product ' . (int)$oc_product_id . '. ' . $response['error']);
+            return array('success' => false, 'error' => $response['error'] ?: 'API error');
+        }
+
+        return array('success' => true);
+    }
+
     private function importProduct(array $prom_product, array $settings, array $languages, $default_category_id) {
         $prom_id = (int)$prom_product['id'];
         $mapping = $this->getProductMappingByPromId($prom_id);
@@ -177,6 +305,38 @@ class PromSync extends \Opencart\System\Engine\Model {
         $this->setProductMapping($prom_id, $prom_external_id, $oc_product_id, $product_data['sku']);
 
         return 'imported';
+    }
+
+    private function extractTotalFromResponse(array $data, array $products) {
+        $candidates = array(
+            'total',
+            'total_count',
+            'total_products',
+            'total_items'
+        );
+
+        foreach ($candidates as $key) {
+            if (isset($data[$key]) && is_numeric($data[$key])) {
+                return (int)$data[$key];
+            }
+        }
+
+        if (isset($data['pagination']) && is_array($data['pagination'])) {
+            foreach ($candidates as $key) {
+                if (isset($data['pagination'][$key]) && is_numeric($data['pagination'][$key])) {
+                    return (int)$data['pagination'][$key];
+                }
+            }
+        }
+
+        if (isset($data['count']) && is_numeric($data['count'])) {
+            $page_count = count($products);
+            if ($page_count && (int)$data['count'] !== $page_count) {
+                return (int)$data['count'];
+            }
+        }
+
+        return 0;
     }
 
     private function updateExistingProduct($oc_product_id, array $prom_product, array $settings, array $languages) {
@@ -237,6 +397,7 @@ class PromSync extends \Opencart\System\Engine\Model {
             $product_description[$language['language_id']] = array(
                 'name' => $texts['name'],
                 'description' => $texts['description'],
+                'tag' => '',
                 'meta_title' => $texts['name'],
                 'meta_description' => '',
                 'meta_keyword' => ''
@@ -262,6 +423,7 @@ class PromSync extends \Opencart\System\Engine\Model {
         }
 
         return array(
+            'master_id' => 0,
             'model' => $model,
             'sku' => $sku,
             'upc' => '',
@@ -281,6 +443,12 @@ class PromSync extends \Opencart\System\Engine\Model {
             'points' => 0,
             'tax_class_id' => 0,
             'status' => $quantity > 0 ? 1 : 0,
+            'weight' => 0,
+            'weight_class_id' => (int)$this->config->get('config_weight_class_id'),
+            'length' => 0,
+            'width' => 0,
+            'height' => 0,
+            'length_class_id' => (int)$this->config->get('config_length_class_id'),
             'sort_order' => 0,
             'product_description' => $product_description,
             'product_category' => $category_ids,
@@ -456,6 +624,19 @@ class PromSync extends \Opencart\System\Engine\Model {
         return !empty($query->row) ? $query->row : null;
     }
 
+    private function getProductMappingByOcId($product_id) {
+        $query = $this->db->query("SELECT * FROM `" . DB_PREFIX . "prom_sync_product` WHERE oc_product_id = '" . (int)$product_id . "' LIMIT 1");
+        return !empty($query->row) ? $query->row : null;
+    }
+
+    private function getProductQuantity($product_id) {
+        $query = $this->db->query("SELECT quantity FROM `" . DB_PREFIX . "product` WHERE product_id = '" . (int)$product_id . "' LIMIT 1");
+        if (!empty($query->row)) {
+            return (int)$query->row['quantity'];
+        }
+        return 0;
+    }
+
     private function getProductMappingByExternalId($external_id) {
         $query = $this->db->query("SELECT * FROM `" . DB_PREFIX . "prom_sync_product` WHERE prom_external_id = '" . $this->db->escape($external_id) . "' LIMIT 1");
         return !empty($query->row) ? $query->row : null;
@@ -499,7 +680,7 @@ class PromSync extends \Opencart\System\Engine\Model {
 
     private function getApi(array $settings) {
         require_once(DIR_EXTENSION . 'prom_sync/system/library/prom_sync/PromApi.php');
-        return new PromSyncApi($settings['token'], $settings['domain'], $settings['language']);
+        return new \PromSyncApi($settings['token'], $settings['domain'], $settings['language']);
     }
 
     private function getLanguages() {

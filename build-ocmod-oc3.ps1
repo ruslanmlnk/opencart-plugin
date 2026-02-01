@@ -2,8 +2,8 @@ $ErrorActionPreference = 'Stop'
 
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $dist = Join-Path $root 'dist'
-$zip = Join-Path $dist 'prom_sync.ocmod.zip'
-$source = Join-Path $root 'oc4\extension\prom_sync'
+$zip = Join-Path $dist 'prom_sync_oc3.ocmod.zip'
+$source = Join-Path $root 'oc3'
 
 if (-not (Test-Path $dist)) {
   New-Item -ItemType Directory -Path $dist | Out-Null
@@ -14,13 +14,13 @@ if (Test-Path $zip) {
 }
 
 if (-not (Test-Path $source)) {
-  throw "Missing oc4 directory: $source"
+  throw "Missing oc3 directory: $source"
 }
 
 Push-Location $source
 try {
-  # Zip root must contain install.json and admin/catalog/system for OC4
-  Compress-Archive -Path '*' -DestinationPath $zip
+  # Zip root must contain install.xml and upload/ for OC3
+  Compress-Archive -Path 'install.xml', 'upload' -DestinationPath $zip
 } finally {
   Pop-Location
 }

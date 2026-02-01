@@ -22,10 +22,25 @@ OpenCart 4.1.x module to import products from Prom.ua (Public API) and keep stoc
 
 ### Option B: Manual (OC4)
 1. Create a folder `extension/prom_sync/` in your OpenCart root.
-2. Copy contents of `oc4/` into `extension/prom_sync/`.
+2. Copy contents of `oc4/extension/prom_sync/` into `extension/prom_sync/`.
 3. In Admin: Extensions > Extensions > Modules > Prom.ua Sync > Install.
 4. Open the module and configure the options above.
 5. Save.
+
+## Installation (OpenCart 3.x)
+### Option A: Extension Installer (.ocmod.zip)
+1. Build `prom_sync_oc3.ocmod.zip` (archive contains `install.xml` and `upload/`).
+   - Build locally: `powershell -ExecutionPolicy Bypass -File .\\build-ocmod-oc3.ps1`
+2. In Admin: Extensions > Installer, upload `prom_sync_oc3.ocmod.zip`.
+3. In Admin: Extensions > Extensions > Modules > Prom.ua Sync > Install.
+4. Open the module and configure the options above.
+5. Save.
+
+### Option B: Manual (OC3)
+1. Copy contents of `upload/` into your OpenCart 3.x root.
+2. In Admin: Extensions > Extensions > Modules > Prom.ua Sync > Install.
+3. Open the module and configure the options above.
+4. Save.
 
 ## Manual import
 In the module settings page, click **Import products now**.

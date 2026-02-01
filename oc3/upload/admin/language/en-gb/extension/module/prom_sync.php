@@ -15,17 +15,20 @@ $_['text_import_started'] = 'Import started. Check the log for details.';
 $_['text_tab_general'] = 'General';
 $_['text_tab_import'] = 'Import';
 $_['text_tab_sync'] = 'Sync';
+$_['text_tab_logs'] = 'Logs';
 $_['text_section_connection'] = 'Connection';
 $_['text_section_import'] = 'Import Settings';
 $_['text_section_mapping'] = 'Mapping & Categories';
 $_['text_section_sync'] = 'Stock Sync';
 $_['text_section_actions'] = 'Actions';
 $_['text_section_cron'] = 'Cron';
+$_['text_section_logs'] = 'Logs';
 $_['text_import_note'] = 'Run a manual import to fetch products from Prom into OpenCart.';
 $_['text_cron_note'] = 'Keep this URL secret. Use it in your server scheduler.';
 $_['text_import_progress'] = 'Import progress';
 $_['text_import_complete'] = 'Import complete.';
 $_['text_import_error'] = 'Import failed. Check the error log.';
+$_['text_logs_note'] = 'Latest entries from prom_sync.log.';
 $_['text_sync'] = 'Sync with Prom';
 $_['text_sync_success'] = 'PromSync: product %d synced.';
 $_['text_sync_error'] = 'PromSync: sync failed.';
@@ -51,6 +54,8 @@ $_['entry_match_by_sku'] = 'Match products by SKU if no mapping';
 $_['entry_cron_key'] = 'Cron key';
 $_['entry_cron_url'] = 'Cron URL';
 $_['entry_limit'] = 'API page size (limit)';
+$_['entry_country_ru'] = 'Manufacturer country (RU)';
+$_['entry_country_uk'] = 'Manufacturer country (UA)';
 
 // Help
 $_['help_domain'] = 'Default: prom.ua (use satu.kz, deal.by, vendigo.ro if needed).';
@@ -59,9 +64,11 @@ $_['help_language'] = 'X-LANGUAGE header for API responses (uk, ru, en).';
 $_['help_default_category'] = 'If no group mapping, new products will use this category ID.';
 $_['help_cron_key'] = 'Secret key for the cron URL.';
 $_['help_limit'] = 'Max number of items per API request.';
+$_['help_country'] = 'Used when Prom does not provide country of origin.';
 
 // Button
 $_['button_import'] = 'Import products now';
+$_['button_copy'] = 'Copy';
 
 // Error
 $_['error_permission'] = 'Warning: You do not have permission to modify Prom.ua Sync.';

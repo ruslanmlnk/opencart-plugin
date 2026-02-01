@@ -1,7 +1,6 @@
 <?php
-namespace Opencart\Catalog\Model\Extension\PromSync\Module;
-
-class PromSync extends \Opencart\System\Engine\Model {
+class ModelExtensionModulePromSync extends Model {
+    private $logger;
     public function pushStockForOrder($order_id, $order_status_id = 0) {
         if (!$this->config->get('module_prom_sync_status')) {
             return;
@@ -70,9 +69,11 @@ class PromSync extends \Opencart\System\Engine\Model {
         }
 
         $summary = $this->syncStockFromPromOrders();
-        return sprintf('PromSync: orders=%d updated=%d skipped=%d errors=%d',
+        $message = sprintf('PromSync: orders=%d updated=%d skipped=%d errors=%d',
             $summary['orders'], $summary['updated'], $summary['skipped'], $summary['errors']
         );
+        $this->logMessage('PromSync cron: ' . $message);
+        return $message;
     }
 
     public function syncStockFromPromOrders() {
@@ -103,6 +104,7 @@ class PromSync extends \Opencart\System\Engine\Model {
             $response = $api->get('/orders/list', $query);
             if (!$response['success']) {
                 $this->log->write('PromSync: API error on orders/list: ' . $response['error']);
+                $this->logMessage('PromSync: API error on orders/list: ' . $response['error']);
                 $errors++;
                 break;
             }
@@ -177,7 +179,10 @@ class PromSync extends \Opencart\System\Engine\Model {
     }
 
     private function applyStockDelta($product_id, $qty) {
+        $current = $this->getProductQuantity($product_id);
+        $new_qty = max($current - (float)$qty, 0);
         $this->db->query("UPDATE `" . DB_PREFIX . "product` SET quantity = GREATEST(quantity - " . (float)$qty . ", 0), date_modified = NOW() WHERE product_id = '" . (int)$product_id . "'");
+        $this->logMessage(sprintf('PromSync cron: product_id=%d stock %s -> %s (delta -%s)', (int)$product_id, $current, $new_qty, (float)$qty));
     }
 
     private function resolveOcProductId(array $prom_product) {
@@ -215,6 +220,18 @@ class PromSync extends \Opencart\System\Engine\Model {
             return (int)$query->row['quantity'];
         }
         return 0;
+    }
+
+    private function getLogger() {
+        if (!$this->logger) {
+            $this->logger = new Log('prom_sync.log');
+        }
+        return $this->logger;
+    }
+
+    private function logMessage($message) {
+        $logger = $this->getLogger();
+        $logger->write($message);
     }
 
     private function isPromOrderProcessed($order_id) {
@@ -270,7 +287,7 @@ class PromSync extends \Opencart\System\Engine\Model {
         $domain = $this->config->get('module_prom_sync_domain') ?: 'prom.ua';
         $language = $this->config->get('module_prom_sync_language');
 
-        require_once(DIR_EXTENSION . 'prom_sync/system/library/prom_sync/PromApi.php');
-        return new \PromSyncApi($token, $domain, $language);
+        require_once(DIR_SYSTEM . 'library/prom_sync/PromApi.php');
+        return new PromSyncApi($token, $domain, $language);
     }
 }
