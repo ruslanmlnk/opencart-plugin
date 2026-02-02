@@ -1,7 +1,9 @@
 <?php
-class ModelExtensionModulePromSync extends Model {
+class ModelExtensionModulePromSync extends Model
+{
     private $logger;
-    public function pushStockForOrder($order_id, $order_status_id = 0) {
+    public function pushStockForOrder($order_id, $order_status_id = 0)
+    {
         if (!$this->config->get('module_prom_sync_status')) {
             return;
         }
@@ -34,7 +36,7 @@ class ModelExtensionModulePromSync extends Model {
 
         $items = array();
         foreach ($order_products as $order_product) {
-            $product_id = (int)$order_product['product_id'];
+            $product_id = (int) $order_product['product_id'];
             $mapping = $this->getProductMappingByOcId($product_id);
             if (!$mapping) {
                 continue;
@@ -42,8 +44,8 @@ class ModelExtensionModulePromSync extends Model {
 
             $quantity = $this->getProductQuantity($product_id);
             $items[] = array(
-                'id' => (int)$mapping['prom_product_id'],
-                'quantity_in_stock' => (int)$quantity,
+                'id' => (int) $mapping['prom_product_id'],
+                'quantity_in_stock' => (int) $quantity,
                 'in_stock' => $quantity > 0,
                 'presence' => $quantity > 0 ? 'available' : 'not_available'
             );
@@ -63,27 +65,44 @@ class ModelExtensionModulePromSync extends Model {
         $this->markOcOrderSynced($order_id);
     }
 
-    public function runCron() {
+    public function runCron()
+    {
         if (!$this->config->get('module_prom_sync_pull_orders')) {
             return 'PromSync: pull orders disabled';
         }
 
         $summary = $this->syncStockFromPromOrders();
-        $message = sprintf('PromSync: orders=%d updated=%d skipped=%d errors=%d',
-            $summary['orders'], $summary['updated'], $summary['skipped'], $summary['errors']
+        $message = sprintf(
+            'PromSync: orders=%d updated=%d skipped=%d errors=%d',
+            $summary['orders'],
+            $summary['updated'],
+            $summary['skipped'],
+            $summary['errors']
         );
         $this->logMessage('PromSync cron: ' . $message);
         return $message;
     }
 
-    public function syncStockFromPromOrders() {
+    public function syncStockFromPromOrders()
+    {
         $api = $this->getApi();
-        $limit = (int)$this->config->get('module_prom_sync_limit');
+        $limit = (int) $this->config->get('module_prom_sync_limit');
         if ($limit <= 0) {
             $limit = 50;
         }
 
         $last_modified_from = $this->config->get('module_prom_sync_last_order_sync');
+
+        if (!$last_modified_from) {
+            $this->logMessage('PromSync cron: initial run, setting starting timestamp and skipping old orders.');
+            $this->updateLastOrderSync();
+            return array(
+                'orders' => 0,
+                'updated' => 0,
+                'skipped' => 0,
+                'errors' => 0
+            );
+        }
 
         $orders_processed = 0;
         $updated = 0;
@@ -103,7 +122,6 @@ class ModelExtensionModulePromSync extends Model {
 
             $response = $api->get('/orders/list', $query);
             if (!$response['success']) {
-                $this->log->write('PromSync: API error on orders/list: ' . $response['error']);
                 $this->logMessage('PromSync: API error on orders/list: ' . $response['error']);
                 $errors++;
                 break;
@@ -121,7 +139,7 @@ class ModelExtensionModulePromSync extends Model {
                     continue;
                 }
 
-                $order_id = (int)$order['id'];
+                $order_id = (int) $order['id'];
                 if ($min_id === null || $order_id < $min_id) {
                     $min_id = $order_id;
                 }
@@ -149,7 +167,7 @@ class ModelExtensionModulePromSync extends Model {
                     if (!$oc_product_id) {
                         continue;
                     }
-                    $qty = isset($product['quantity']) ? (float)$product['quantity'] : 0;
+                    $qty = isset($product['quantity']) ? (float) $product['quantity'] : 0;
                     if ($qty <= 0) {
                         continue;
                     }
@@ -166,6 +184,13 @@ class ModelExtensionModulePromSync extends Model {
             }
 
             $last_id = $min_id - 1;
+
+            // Safety check: stop if we processed enough orders to avoid timeout
+            if ($orders_processed >= 200) {
+                $this->logMessage('PromSync cron: reached batch safety limit (200 orders).');
+                break;
+            }
+
         } while ($last_id > 0 && count($data['orders']) == $limit);
 
         $this->updateLastOrderSync();
@@ -178,34 +203,36 @@ class ModelExtensionModulePromSync extends Model {
         );
     }
 
-    private function applyStockDelta($product_id, $qty) {
+    private function applyStockDelta($product_id, $qty)
+    {
         $current = $this->getProductQuantity($product_id);
-        $new_qty = max($current - (float)$qty, 0);
-        $this->db->query("UPDATE `" . DB_PREFIX . "product` SET quantity = GREATEST(quantity - " . (float)$qty . ", 0), date_modified = NOW() WHERE product_id = '" . (int)$product_id . "'");
-        $this->logMessage(sprintf('PromSync cron: product_id=%d stock %s -> %s (delta -%s)', (int)$product_id, $current, $new_qty, (float)$qty));
+        $new_qty = max($current - (float) $qty, 0);
+        $this->db->query("UPDATE `" . DB_PREFIX . "product` SET quantity = GREATEST(quantity - " . (float) $qty . ", 0), date_modified = NOW() WHERE product_id = '" . (int) $product_id . "'");
+        $this->logMessage(sprintf('PromSync cron: product_id=%d stock %s -> %s (delta -%s)', (int) $product_id, $current, $new_qty, (float) $qty));
     }
 
-    private function resolveOcProductId(array $prom_product) {
+    private function resolveOcProductId(array $prom_product)
+    {
         if (!empty($prom_product['id'])) {
-            $mapping = $this->getProductMappingByPromId((int)$prom_product['id']);
+            $mapping = $this->getProductMappingByPromId((int) $prom_product['id']);
             if ($mapping) {
-                return (int)$mapping['oc_product_id'];
+                return (int) $mapping['oc_product_id'];
             }
         }
 
         if (!empty($prom_product['external_id'])) {
             $mapping = $this->getProductMappingByExternalId($prom_product['external_id']);
             if ($mapping) {
-                return (int)$mapping['oc_product_id'];
+                return (int) $mapping['oc_product_id'];
             }
         }
 
         if (!empty($this->config->get('module_prom_sync_match_by_sku')) && !empty($prom_product['sku'])) {
             $query = $this->db->query("SELECT product_id FROM `" . DB_PREFIX . "product` WHERE sku = '" . $this->db->escape($prom_product['sku']) . "' LIMIT 1");
             if (!empty($query->row)) {
-                $product_id = (int)$query->row['product_id'];
+                $product_id = (int) $query->row['product_id'];
                 if (!empty($prom_product['id'])) {
-                    $this->setProductMapping((int)$prom_product['id'], $prom_product['external_id'], $product_id, $prom_product['sku']);
+                    $this->setProductMapping((int) $prom_product['id'], $prom_product['external_id'], $product_id, $prom_product['sku']);
                 }
                 return $product_id;
             }
@@ -214,75 +241,91 @@ class ModelExtensionModulePromSync extends Model {
         return 0;
     }
 
-    private function getProductQuantity($product_id) {
-        $query = $this->db->query("SELECT quantity FROM `" . DB_PREFIX . "product` WHERE product_id = '" . (int)$product_id . "'");
+    private function getProductQuantity($product_id)
+    {
+        $query = $this->db->query("SELECT quantity FROM `" . DB_PREFIX . "product` WHERE product_id = '" . (int) $product_id . "'");
         if (!empty($query->row)) {
-            return (int)$query->row['quantity'];
+            return (int) $query->row['quantity'];
         }
         return 0;
     }
 
-    private function getLogger() {
+    private function getLogger()
+    {
         if (!$this->logger) {
             $this->logger = new Log('prom_sync.log');
         }
         return $this->logger;
     }
 
-    private function logMessage($message) {
+    public function logMessage($message)
+    {
         $logger = $this->getLogger();
         $logger->write($message);
     }
 
-    private function isPromOrderProcessed($order_id) {
-        $query = $this->db->query("SELECT prom_order_id FROM `" . DB_PREFIX . "prom_sync_prom_order` WHERE prom_order_id = '" . (int)$order_id . "' LIMIT 1");
+    private function isPromOrderProcessed($order_id)
+    {
+        $query = $this->db->query("SELECT prom_order_id FROM `" . DB_PREFIX . "prom_sync_prom_order` WHERE prom_order_id = '" . (int) $order_id . "' LIMIT 1");
         return !empty($query->row);
     }
 
-    private function markPromOrderProcessed($order_id) {
-        $this->db->query("REPLACE INTO `" . DB_PREFIX . "prom_sync_prom_order` SET prom_order_id = '" . (int)$order_id . "', processed_at = NOW()");
+    public function markPromOrderProcessed($order_id)
+    {
+        $this->db->query("REPLACE INTO `" . DB_PREFIX . "prom_sync_prom_order` SET prom_order_id = '" . (int) $order_id . "', processed_at = NOW()");
     }
 
-    private function isOcOrderSynced($order_id) {
-        $query = $this->db->query("SELECT oc_order_id FROM `" . DB_PREFIX . "prom_sync_oc_order` WHERE oc_order_id = '" . (int)$order_id . "' LIMIT 1");
+    private function isOcOrderSynced($order_id)
+    {
+        $query = $this->db->query("SELECT oc_order_id FROM `" . DB_PREFIX . "prom_sync_oc_order` WHERE oc_order_id = '" . (int) $order_id . "' LIMIT 1");
         return !empty($query->row);
     }
 
-    private function markOcOrderSynced($order_id) {
-        $this->db->query("REPLACE INTO `" . DB_PREFIX . "prom_sync_oc_order` SET oc_order_id = '" . (int)$order_id . "', processed_at = NOW()");
+    public function markOcOrderSynced($order_id)
+    {
+        $this->db->query("REPLACE INTO `" . DB_PREFIX . "prom_sync_oc_order` SET oc_order_id = '" . (int) $order_id . "', processed_at = NOW()");
     }
 
-    private function updateLastOrderSync() {
-        $value = date('c');
-        $this->db->query("REPLACE INTO `" . DB_PREFIX . "setting` SET store_id = '0', `code` = 'module_prom_sync', `key` = 'module_prom_sync_last_order_sync', `value` = '" . $this->db->escape($value) . "', `serialized` = '0'");
+    public function updateLastOrderSync($value = null)
+    {
+        if ($value === null) {
+            $value = date('c');
+        }
+        $this->db->query("DELETE FROM `" . DB_PREFIX . "setting` WHERE store_id = '0' AND `code` = 'module_prom_sync' AND `key` = 'module_prom_sync_last_order_sync'");
+        $this->db->query("INSERT INTO `" . DB_PREFIX . "setting` SET store_id = '0', `code` = 'module_prom_sync', `key` = 'module_prom_sync_last_order_sync', `value` = '" . $this->db->escape($value) . "', `serialized` = '0'");
     }
 
-    private function getProductMappingByPromId($prom_id) {
-        $query = $this->db->query("SELECT * FROM `" . DB_PREFIX . "prom_sync_product` WHERE prom_product_id = '" . (int)$prom_id . "' LIMIT 1");
+    private function getProductMappingByPromId($prom_id)
+    {
+        $query = $this->db->query("SELECT * FROM `" . DB_PREFIX . "prom_sync_product` WHERE prom_product_id = '" . (int) $prom_id . "' LIMIT 1");
         return !empty($query->row) ? $query->row : null;
     }
 
-    private function getProductMappingByExternalId($external_id) {
+    private function getProductMappingByExternalId($external_id)
+    {
         $query = $this->db->query("SELECT * FROM `" . DB_PREFIX . "prom_sync_product` WHERE prom_external_id = '" . $this->db->escape($external_id) . "' LIMIT 1");
         return !empty($query->row) ? $query->row : null;
     }
 
-    private function getProductMappingByOcId($product_id) {
-        $query = $this->db->query("SELECT * FROM `" . DB_PREFIX . "prom_sync_product` WHERE oc_product_id = '" . (int)$product_id . "' LIMIT 1");
+    private function getProductMappingByOcId($product_id)
+    {
+        $query = $this->db->query("SELECT * FROM `" . DB_PREFIX . "prom_sync_product` WHERE oc_product_id = '" . (int) $product_id . "' LIMIT 1");
         return !empty($query->row) ? $query->row : null;
     }
 
-    private function setProductMapping($prom_id, $external_id, $oc_product_id, $sku) {
+    private function setProductMapping($prom_id, $external_id, $oc_product_id, $sku)
+    {
         $this->db->query("REPLACE INTO `" . DB_PREFIX . "prom_sync_product` SET
-            prom_product_id = '" . (int)$prom_id . "',
-            prom_external_id = '" . $this->db->escape((string)$external_id) . "',
-            oc_product_id = '" . (int)$oc_product_id . "',
-            oc_sku = '" . $this->db->escape((string)$sku) . "',
+            prom_product_id = '" . (int) $prom_id . "',
+            prom_external_id = '" . $this->db->escape((string) $external_id) . "',
+            oc_product_id = '" . (int) $oc_product_id . "',
+            oc_sku = '" . $this->db->escape((string) $sku) . "',
             date_added = NOW(),
             date_modified = NOW()");
     }
 
-    private function getApi() {
+    private function getApi()
+    {
         $token = $this->config->get('module_prom_sync_token');
         $domain = $this->config->get('module_prom_sync_domain') ?: 'prom.ua';
         $language = $this->config->get('module_prom_sync_language');

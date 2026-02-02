@@ -152,7 +152,19 @@ class ModelExtensionModulePromSync extends Model
 
         $this->logMessage(sprintf('PromSync: import summary imported=%d updated=%d skipped=%d errors=%d', $imported, $updated, $skipped, $errors));
 
+        // Update the order sync timestamp so that Cron doesn't process old orders from before this import
+        $this->updateLastOrderSync();
+
         return $summary;
+    }
+
+    private function updateLastOrderSync($value = null)
+    {
+        if ($value === null) {
+            $value = date('c');
+        }
+        $this->db->query("DELETE FROM `" . DB_PREFIX . "setting` WHERE store_id = '0' AND `code` = 'module_prom_sync' AND `key` = 'module_prom_sync_last_order_sync'");
+        $this->db->query("INSERT INTO `" . DB_PREFIX . "setting` SET store_id = '0', `code` = 'module_prom_sync', `key` = 'module_prom_sync_last_order_sync', `value` = '" . $this->db->escape($value) . "', `serialized` = '0'");
     }
 
     public function importProductsBatch(array $options = array())
@@ -458,11 +470,15 @@ class ModelExtensionModulePromSync extends Model
             }
         }
 
-        $country_values = $this->getCountryValues($prom_product, $languages);
-        if (!empty($country_values)) {
-            $this->setCountryAttribute($oc_product_id, $country_values, $languages);
-            $changes[] = 'country_attribute';
+        // Import all attributes
+        $product_attribute = $this->buildProductAttributes($prom_product, $languages);
+        $this->db->query("DELETE FROM " . DB_PREFIX . "product_attribute WHERE product_id = '" . (int) $oc_product_id . "'");
+        foreach ($product_attribute as $attr) {
+            foreach ($attr['product_attribute_description'] as $lang_id => $desc) {
+                $this->db->query("INSERT INTO " . DB_PREFIX . "product_attribute SET product_id = '" . (int) $oc_product_id . "', attribute_id = '" . (int) $attr['attribute_id'] . "', language_id = '" . (int) $lang_id . "', text = '" . $this->db->escape($desc['text']) . "'");
+            }
         }
+        $changes[] = 'attributes';
 
         if ($this->ensureProductSeoUrl($oc_product_id, $prom_product, $languages)) {
             $changes[] = 'seo';
@@ -514,11 +530,7 @@ class ModelExtensionModulePromSync extends Model
             }
         }
 
-        $product_attribute = array();
-        $country_values = $this->getCountryValues($prom_product, $languages);
-        if (!empty($country_values)) {
-            $product_attribute = $this->buildCountryAttribute($country_values, $languages);
-        }
+        $product_attribute = $this->buildProductAttributes($prom_product, $languages);
 
         $product_seo_url = $this->buildProductSeoUrl($prom_product, $languages);
 
@@ -851,345 +863,118 @@ class ModelExtensionModulePromSync extends Model
         return $urls;
     }
 
-    private function getCountryValue(array $prom_product)
+    private function buildProductAttributes(array $prom_product, array $languages)
     {
-        $direct_keys = array(
-            'country',
-            'country_of_origin',
-            'origin_country',
-            'manufacturer_country',
-            'production_country',
-            'country_origin',
-            'country_manufacturer'
-        );
+        $product_attributes = array();
 
-        foreach ($direct_keys as $key) {
-            if (!empty($prom_product[$key])) {
-                return trim((string) $prom_product[$key]);
-            }
+        $raw_attrs = array();
+        if (!empty($prom_product['attributes']) && is_array($prom_product['attributes'])) {
+            $raw_attrs = $prom_product['attributes'];
+        } elseif (!empty($prom_product['properties']) && is_array($prom_product['properties'])) {
+            $raw_attrs = $prom_product['properties'];
         }
 
-        if (!empty($prom_product['attributes'])) {
-            $value = $this->extractCountryFromAttributes($prom_product['attributes']);
-            if ($value !== '') {
-                return $value;
-            }
-        }
-
-        if (!empty($prom_product['properties'])) {
-            $value = $this->extractCountryFromAttributes($prom_product['properties']);
-            if ($value !== '') {
-                return $value;
-            }
-        }
-
-        return '';
-    }
-
-    private function getCountryValues(array $prom_product, array $languages)
-    {
-        $values = array();
-
-        $value = $this->getCountryValue($prom_product);
-        if ($value !== '') {
-            foreach ($languages as $language) {
-                $values[$language['language_id']] = $value;
-            }
-            return $values;
-        }
-
-        $ru_default = trim((string) $this->config->get('module_prom_sync_country_ru'));
-        $uk_default = trim((string) $this->config->get('module_prom_sync_country_uk'));
-
-        if ($ru_default === '' && $uk_default === '') {
-            $domain = strtolower((string) $this->config->get('module_prom_sync_domain'));
-            if ($domain === '' || substr($domain, -3) === '.ua') {
-                $ru_default = 'Украина';
-                $uk_default = 'Україна';
-            }
-        }
-        if ($ru_default === '' && $uk_default === '') {
-            $domain = (string) $this->config->get('module_prom_sync_domain');
-            if ($domain && stripos($domain, '.ua') !== false) {
-                $ru_default = 'Украина';
-                $uk_default = 'Україна';
-            }
-        }
-        $fallback = $ru_default !== '' ? $ru_default : $uk_default;
-
-        foreach ($languages as $language) {
-            $code = strtolower(substr($language['code'], 0, 2));
-            if ($code === 'ru') {
-                $value = $ru_default;
-            } elseif ($code === 'uk' || $code === 'ua') {
-                $value = $uk_default;
-            } else {
-                $value = $fallback;
-            }
-
-            if ($value !== '') {
-                $values[$language['language_id']] = $value;
-            }
-        }
-
-        return $values;
-    }
-
-    private function extractCountryFromAttributes($attributes)
-    {
-        if (!is_array($attributes)) {
-            return '';
-        }
-
-        foreach ($attributes as $key => $value) {
-            if (!is_int($key) && $this->matchesCountryAttributeName($key)) {
-                if (is_scalar($value)) {
-                    return trim((string) $value);
-                }
-                if (is_array($value)) {
-                    if (!empty($value['value'])) {
-                        return trim((string) $value['value']);
-                    }
-                    if (!empty($value['text'])) {
-                        return trim((string) $value['text']);
-                    }
-                }
-            }
-        }
-
-        foreach ($attributes as $item) {
-            if (!is_array($item)) {
-                continue;
-            }
-
-            $names = array();
-            foreach (array('name', 'title', 'key') as $key) {
-                if (!empty($item[$key])) {
-                    $names[] = $item[$key];
-                }
-            }
-
-            if (!empty($item['name_multilang']) && is_array($item['name_multilang'])) {
-                foreach ($item['name_multilang'] as $value) {
-                    if ($value !== '') {
-                        $names[] = $value;
-                    }
-                }
-            }
-
-            $matched = false;
-            foreach ($names as $name) {
-                if ($this->matchesCountryAttributeName($name)) {
-                    $matched = true;
-                    break;
-                }
-            }
-
-            if (!$matched) {
-                continue;
-            }
-
-            foreach (array('value', 'text') as $key) {
-                if (!empty($item[$key]) && is_scalar($item[$key])) {
-                    return trim((string) $item[$key]);
-                }
-            }
-
-            if (!empty($item['value_multilang']) && is_array($item['value_multilang'])) {
-                foreach ($item['value_multilang'] as $value) {
-                    if ($value !== '') {
-                        return trim((string) $value);
-                    }
-                }
-            }
-        }
-
-        return '';
-    }
-
-    private function matchesCountryAttributeName($name)
-    {
-        $normalized = $this->normalizeAttributeName($name);
-        if ($normalized === '') {
-            return false;
-        }
-
-        $candidates = array(
-            'страна производитель',
-            'страна производителя',
-            'страна производства',
-            'країна виробник',
-            'країна виробника',
-            'країна виробництва',
-            'country of origin',
-            'origin country',
-            'manufacturer country',
-            'production country',
-            'country origin',
-            'country'
-        );
-
-        foreach ($candidates as $candidate) {
-            if ($normalized === $candidate) {
-                return true;
-            }
-        }
-
-        if (strpos($normalized, 'страна') !== false && strpos($normalized, 'производ') !== false) {
-            return true;
-        }
-        if (strpos($normalized, 'країна') !== false && (strpos($normalized, 'вироб') !== false || strpos($normalized, 'виробництв') !== false)) {
-            return true;
-        }
-        if (strpos($normalized, 'country') !== false && strpos($normalized, 'origin') !== false) {
-            return true;
-        }
-
-        return false;
-    }
-
-    private function normalizeAttributeName($name)
-    {
-        $name = trim((string) $name);
-        if ($name === '') {
-            return '';
-        }
-        if (function_exists('mb_strtolower')) {
-            $name = mb_strtolower($name, 'UTF-8');
-        } else {
-            $name = strtolower($name);
-        }
-        $name = str_replace(array('_', '-'), ' ', $name);
-        $name = preg_replace('/\\s+/', ' ', $name);
-        $name = trim($name);
-        return $name;
-    }
-
-    private function buildCountryAttribute(array $values, array $languages)
-    {
-        $attribute_id = $this->ensureCountryAttribute($languages);
-        if (!$attribute_id) {
-            return array();
-        }
-
-        $default_value = $this->getDefaultAttributeValue($values);
-
-        $descriptions = array();
-        foreach ($languages as $language) {
-            $language_id = (int) $language['language_id'];
-            $text = isset($values[$language_id]) ? $values[$language_id] : $default_value;
-            $descriptions[$language_id] = array('text' => $text);
-        }
-
-        return array(
-            array(
-                'attribute_id' => $attribute_id,
-                'product_attribute_description' => $descriptions
-            )
-        );
-    }
-
-    private function setCountryAttribute($product_id, array $values, array $languages)
-    {
-        $attribute_id = $this->ensureCountryAttribute($languages);
-        if (!$attribute_id) {
-            return;
-        }
-
-        $default_value = $this->getDefaultAttributeValue($values);
-
-        $this->db->query("DELETE FROM `" . DB_PREFIX . "product_attribute` WHERE product_id = '" . (int) $product_id . "' AND attribute_id = '" . (int) $attribute_id . "'");
-        foreach ($languages as $language) {
-            $language_id = (int) $language['language_id'];
-            $text_value = isset($values[$language_id]) ? $values[$language_id] : $default_value;
-            $text = $this->db->escape($text_value);
-            $this->db->query("INSERT INTO `" . DB_PREFIX . "product_attribute` SET product_id = '" . (int) $product_id . "', attribute_id = '" . (int) $attribute_id . "', language_id = '" . (int) $language_id . "', text = '" . $text . "'");
-        }
-    }
-
-    private function getDefaultAttributeValue(array $values)
-    {
-        foreach ($values as $value) {
-            if ($value !== '') {
-                return $value;
-            }
-        }
-        return '';
-    }
-
-    private function ensureCountryAttribute(array $languages)
-    {
-        if (isset($this->attribute_cache['country'])) {
-            return (int) $this->attribute_cache['country'];
-        }
-
-        $names = $this->getCountryAttributeNames($languages);
-        $unique = array_values(array_unique($names));
-
-        if (!empty($unique)) {
-            $escaped = array();
-            foreach ($unique as $name) {
-                $escaped[] = "'" . $this->db->escape($name) . "'";
-            }
-            $query = $this->db->query("SELECT attribute_id FROM `" . DB_PREFIX . "attribute_description` WHERE name IN (" . implode(', ', $escaped) . ") LIMIT 1");
-            if (!empty($query->row)) {
-                $this->attribute_cache['country'] = (int) $query->row['attribute_id'];
-                return (int) $query->row['attribute_id'];
-            }
+        if (empty($raw_attrs)) {
+            return $product_attributes;
         }
 
         $group_id = $this->ensureAttributeGroup($languages);
-        $this->db->query("INSERT INTO `" . DB_PREFIX . "attribute` SET attribute_group_id = '" . (int) $group_id . "', sort_order = '0'");
-        $attribute_id = (int) $this->db->getLastId();
-
-        foreach ($languages as $language) {
-            $language_id = (int) $language['language_id'];
-            $name = $names[$language_id];
-            $this->db->query("INSERT INTO `" . DB_PREFIX . "attribute_description` SET attribute_id = '" . (int) $attribute_id . "', language_id = '" . (int) $language_id . "', name = '" . $this->db->escape($name) . "'");
+        if (!$group_id) {
+            return $product_attributes;
         }
 
-        $this->attribute_cache['country'] = $attribute_id;
-        return $attribute_id;
+        foreach ($raw_attrs as $attr) {
+            $name = '';
+            if (!empty($attr['name'])) {
+                $name = trim($attr['name']);
+            } elseif (!empty($attr['title'])) {
+                $name = trim($attr['title']);
+            } elseif (!empty($attr['key'])) {
+                $name = trim($attr['key']);
+            }
+
+            if (!$name) {
+                continue;
+            }
+
+            $value = '';
+            if (isset($attr['value']) && is_scalar($attr['value'])) {
+                $value = trim((string) $attr['value']);
+            } elseif (!empty($attr['text']) && is_scalar($attr['text'])) {
+                $value = trim((string) $attr['text']);
+            }
+
+            if ($value === '') {
+                continue;
+            }
+
+            $attribute_id = $this->ensureAttributeByGroup($name, $group_id, $languages);
+            if (!$attribute_id) {
+                continue;
+            }
+
+            $descriptions = array();
+            foreach ($languages as $language) {
+                $val_lang = $value;
+                if (!empty($attr['value_multilang']) && is_array($attr['value_multilang'])) {
+                    $code = strtolower(substr($language['code'], 0, 2));
+                    if ($code === 'ua')
+                        $code = 'uk';
+                    if (isset($attr['value_multilang'][$code])) {
+                        $val_lang = trim((string) $attr['value_multilang'][$code]);
+                    }
+                }
+                $descriptions[$language['language_id']] = array('text' => $val_lang);
+            }
+
+            $product_attributes[] = array(
+                'attribute_id' => $attribute_id,
+                'product_attribute_description' => $descriptions
+            );
+        }
+
+        return $product_attributes;
     }
 
     private function ensureAttributeGroup(array $languages)
     {
-        if (isset($this->attribute_cache['group'])) {
-            return (int) $this->attribute_cache['group'];
-        }
+        $name = 'Характеристики Prom.ua';
+        $query = $this->db->query("SELECT attribute_group_id FROM " . DB_PREFIX . "attribute_group_description WHERE name = '" . $this->db->escape($name) . "' LIMIT 1");
 
-        $group_name = 'Prom Sync';
-        $query = $this->db->query("SELECT attribute_group_id FROM `" . DB_PREFIX . "attribute_group_description` WHERE name = '" . $this->db->escape($group_name) . "' LIMIT 1");
         if (!empty($query->row)) {
-            $this->attribute_cache['group'] = (int) $query->row['attribute_group_id'];
             return (int) $query->row['attribute_group_id'];
         }
 
-        $this->db->query("INSERT INTO `" . DB_PREFIX . "attribute_group` SET sort_order = '0'");
-        $group_id = (int) $this->db->getLastId();
-
+        $this->load->model('catalog/attribute_group');
+        $group_description = array();
         foreach ($languages as $language) {
-            $this->db->query("INSERT INTO `" . DB_PREFIX . "attribute_group_description` SET attribute_group_id = '" . (int) $group_id . "', language_id = '" . (int) $language['language_id'] . "', name = '" . $this->db->escape($group_name) . "'");
+            $group_description[$language['language_id']] = array('name' => $name);
         }
 
-        $this->attribute_cache['group'] = $group_id;
-        return $group_id;
+        return $this->model_catalog_attribute_group->addAttributeGroup(array(
+            'sort_order' => 0,
+            'attribute_group_description' => $group_description
+        ));
     }
 
-    private function getCountryAttributeNames(array $languages)
+    private function ensureAttributeByGroup($name, $group_id, array $languages)
     {
-        $names = array();
-        foreach ($languages as $language) {
-            $code = strtolower(substr($language['code'], 0, 2));
-            if ($code === 'uk' || $code === 'ua') {
-                $names[$language['language_id']] = 'Країна виробник';
-            } elseif ($code === 'ru') {
-                $names[$language['language_id']] = 'Страна производитель';
-            } else {
-                $names[$language['language_id']] = 'Country of origin';
-            }
+        $query = $this->db->query("SELECT attribute_id FROM " . DB_PREFIX . "attribute_description WHERE name = '" . $this->db->escape($name) . "' LIMIT 1");
+        if (!empty($query->row)) {
+            return (int) $query->row['attribute_id'];
         }
-        return $names;
+
+        $this->load->model('catalog/attribute');
+        $attribute_description = array();
+        foreach ($languages as $language) {
+            $attribute_description[$language['language_id']] = array('name' => $name);
+        }
+
+        return $this->model_catalog_attribute->addAttribute(array(
+            'attribute_group_id' => $group_id,
+            'sort_order' => 0,
+            'attribute_description' => $attribute_description
+        ));
     }
 
     private function downloadImage($url)
@@ -1429,7 +1214,7 @@ class ModelExtensionModulePromSync extends Model
     {
         $category_ids = array();
 
-        if (!empty($settings['map_groups'])) {
+        if (!empty($settings['map_groups']) || !empty($settings['single_category'])) {
             $group = null;
             if (!empty($prom_product['group'])) {
                 if (is_array($prom_product['group'])) {
@@ -1477,9 +1262,19 @@ class ModelExtensionModulePromSync extends Model
         }
 
         if (!empty($group['parent_group_id'])) {
-            $parent_query = $this->db->query("SELECT oc_category_id FROM `" . DB_PREFIX . "prom_sync_group` WHERE prom_group_id = '" . (int) $group['parent_group_id'] . "' LIMIT 1");
+            $prom_parent_id = (int) $group['parent_group_id'];
+            $parent_query = $this->db->query("SELECT oc_category_id FROM `" . DB_PREFIX . "prom_sync_group` WHERE prom_group_id = '" . (int) $prom_parent_id . "' LIMIT 1");
+
             if (!empty($parent_query->row)) {
                 $parent_id = (int) $parent_query->row['oc_category_id'];
+            } else {
+                // Parent group not mapped yet. Try to find its info in $prom_product if available, 
+                // but usually we only have the ID here.
+                // For a proper recursive build, we'd need more info. 
+                // However, Prom typically sends products with group info.
+                // If we don't have parent name, we'll create a placeholder or just use ТОВАРИ.
+                $parent_group = array('id' => $prom_parent_id);
+                $parent_id = $this->ensureCategoryForGroup($parent_group, $settings, $languages);
             }
         }
 
