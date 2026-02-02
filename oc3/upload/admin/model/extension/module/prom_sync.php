@@ -1,8 +1,10 @@
 <?php
-class ModelExtensionModulePromSync extends Model {
+class ModelExtensionModulePromSync extends Model
+{
     private $attribute_cache = array();
     private $logger;
-    public function install() {
+    public function install()
+    {
         $this->db->query("CREATE TABLE IF NOT EXISTS `" . DB_PREFIX . "prom_sync_product` (
             `prom_product_id` BIGINT NOT NULL,
             `prom_external_id` VARCHAR(64) NULL,
@@ -44,7 +46,8 @@ class ModelExtensionModulePromSync extends Model {
         $this->model_setting_event->addEvent('prom_sync_product_list', 'view/catalog/product_list/before', 'extension/prom_sync/product/list', 1, 3);
     }
 
-    public function uninstall() {
+    public function uninstall()
+    {
         $this->load->model('setting/event');
         $this->model_setting_event->deleteEventByCode('prom_sync_order_history');
         $this->model_setting_event->deleteEventByCode('prom_sync_menu');
@@ -56,11 +59,12 @@ class ModelExtensionModulePromSync extends Model {
         $this->db->query("DROP TABLE IF EXISTS `" . DB_PREFIX . "prom_sync_oc_order`");
     }
 
-    public function importProducts(array $options = array()) {
+    public function importProducts(array $options = array())
+    {
         $settings = $this->getSettings();
         $api = $this->getApi($settings);
 
-        $limit = isset($options['limit']) ? (int)$options['limit'] : (int)$settings['limit'];
+        $limit = isset($options['limit']) ? (int) $options['limit'] : (int) $settings['limit'];
         if ($limit <= 0) {
             $limit = 50;
         }
@@ -75,7 +79,7 @@ class ModelExtensionModulePromSync extends Model {
         $errors = 0;
 
         $languages = $this->getLanguages();
-        $default_category_id = (int)$settings['default_category_id'];
+        $default_category_id = (int) $settings['default_category_id'];
         $last_modified_from = !empty($options['last_modified_from']) ? $options['last_modified_from'] : null;
 
         do {
@@ -84,7 +88,7 @@ class ModelExtensionModulePromSync extends Model {
                 $query['last_id'] = $last_id;
             }
             if (!empty($options['group_id'])) {
-                $query['group_id'] = (int)$options['group_id'];
+                $query['group_id'] = (int) $options['group_id'];
             }
             if ($last_modified_from) {
                 $query['last_modified_from'] = $last_modified_from;
@@ -115,7 +119,7 @@ class ModelExtensionModulePromSync extends Model {
                     continue;
                 }
 
-                $prom_id = (int)$prom_product['id'];
+                $prom_id = (int) $prom_product['id'];
                 if ($min_id === null || $prom_id < $min_id) {
                     $min_id = $prom_id;
                 }
@@ -151,21 +155,22 @@ class ModelExtensionModulePromSync extends Model {
         return $summary;
     }
 
-    public function importProductsBatch(array $options = array()) {
+    public function importProductsBatch(array $options = array())
+    {
         $settings = $this->getSettings();
         $api = $this->getApi($settings);
 
-        $limit = isset($options['limit']) ? (int)$options['limit'] : (int)$settings['limit'];
+        $limit = isset($options['limit']) ? (int) $options['limit'] : (int) $settings['limit'];
         if ($limit <= 0) {
             $limit = 50;
         }
 
         $query = array('limit' => $limit);
         if (isset($options['last_id']) && $options['last_id'] !== '' && $options['last_id'] !== null) {
-            $query['last_id'] = (int)$options['last_id'];
+            $query['last_id'] = (int) $options['last_id'];
         }
         if (!empty($options['group_id'])) {
-            $query['group_id'] = (int)$options['group_id'];
+            $query['group_id'] = (int) $options['group_id'];
         }
         if (!empty($options['last_modified_from'])) {
             $query['last_modified_from'] = $options['last_modified_from'];
@@ -196,7 +201,7 @@ class ModelExtensionModulePromSync extends Model {
         $min_id = null;
 
         $languages = $this->getLanguages();
-        $default_category_id = (int)$settings['default_category_id'];
+        $default_category_id = (int) $settings['default_category_id'];
 
         foreach ($products as $prom_product) {
             if (!isset($prom_product['id'])) {
@@ -204,7 +209,7 @@ class ModelExtensionModulePromSync extends Model {
                 continue;
             }
 
-            $prom_id = (int)$prom_product['id'];
+            $prom_id = (int) $prom_product['id'];
             if ($min_id === null || $prom_id < $min_id) {
                 $min_id = $prom_id;
             }
@@ -245,21 +250,22 @@ class ModelExtensionModulePromSync extends Model {
         );
     }
 
-    public function syncProductByOcId($oc_product_id) {
+    public function syncProductByOcId($oc_product_id)
+    {
         if (!$this->config->get('module_prom_sync_status')) {
             return array('success' => false, 'error' => 'PromSync: module disabled');
         }
 
-        $mapping = $this->getProductMappingByOcId((int)$oc_product_id);
+        $mapping = $this->getProductMappingByOcId((int) $oc_product_id);
         if (!$mapping || empty($mapping['prom_product_id'])) {
             return array('success' => false, 'error' => 'PromSync: product not mapped to Prom');
         }
 
-        $quantity = $this->getProductQuantity((int)$oc_product_id);
+        $quantity = $this->getProductQuantity((int) $oc_product_id);
         $items = array(
             array(
-                'id' => (int)$mapping['prom_product_id'],
-                'quantity_in_stock' => (int)$quantity,
+                'id' => (int) $mapping['prom_product_id'],
+                'quantity_in_stock' => (int) $quantity,
                 'in_stock' => $quantity > 0,
                 'presence' => $quantity > 0 ? 'available' : 'not_available'
             )
@@ -268,18 +274,19 @@ class ModelExtensionModulePromSync extends Model {
         $api = $this->getApi($this->getSettings());
         $response = $api->post('/products/edit', $items);
         if (!$response['success']) {
-            $this->log->write('PromSync: failed to sync product ' . (int)$oc_product_id . '. ' . $response['error']);
+            $this->log->write('PromSync: failed to sync product ' . (int) $oc_product_id . '. ' . $response['error']);
             return array('success' => false, 'error' => $response['error'] ?: 'API error');
         }
 
         return array('success' => true);
     }
 
-    private function importProduct(array $prom_product, array $settings, array $languages, $default_category_id) {
-        $prom_id = (int)$prom_product['id'];
+    private function importProduct(array $prom_product, array $settings, array $languages, $default_category_id)
+    {
+        $prom_id = (int) $prom_product['id'];
         $mapping = $this->getProductMappingByPromId($prom_id);
 
-        $prom_external_id = isset($prom_product['external_id']) ? (string)$prom_product['external_id'] : null;
+        $prom_external_id = isset($prom_product['external_id']) ? (string) $prom_product['external_id'] : null;
 
         if (!$mapping && $prom_external_id) {
             $mapping = $this->getProductMappingByExternalId($prom_external_id);
@@ -288,8 +295,8 @@ class ModelExtensionModulePromSync extends Model {
         $update_existing = !empty($settings['update_existing']);
 
         if ($mapping) {
-            $this->updateExistingProduct((int)$mapping['oc_product_id'], $prom_product, $settings, $languages, $default_category_id);
-            $this->touchProductMapping($prom_id, $prom_external_id, (int)$mapping['oc_product_id']);
+            $this->updateExistingProduct((int) $mapping['oc_product_id'], $prom_product, $settings, $languages, $default_category_id);
+            $this->touchProductMapping($prom_id, $prom_external_id, (int) $mapping['oc_product_id']);
             return 'updated';
         }
 
@@ -308,12 +315,13 @@ class ModelExtensionModulePromSync extends Model {
             $image_count += count($product_data['product_image']);
         }
         $category_count = (!empty($product_data['product_category']) && is_array($product_data['product_category'])) ? count($product_data['product_category']) : 0;
-        $this->logMessage(sprintf('PromSync: imported product prom_id=%d oc_id=%d images=%d categories=%d', $prom_id, (int)$oc_product_id, $image_count, $category_count));
+        $this->logMessage(sprintf('PromSync: imported product prom_id=%d oc_id=%d images=%d categories=%d', $prom_id, (int) $oc_product_id, $image_count, $category_count));
 
         return 'imported';
     }
 
-    private function extractTotalFromResponse(array $data, array $products) {
+    private function extractTotalFromResponse(array $data, array $products)
+    {
         $candidates = array(
             'total',
             'total_count',
@@ -323,29 +331,30 @@ class ModelExtensionModulePromSync extends Model {
 
         foreach ($candidates as $key) {
             if (isset($data[$key]) && is_numeric($data[$key])) {
-                return (int)$data[$key];
+                return (int) $data[$key];
             }
         }
 
         if (isset($data['pagination']) && is_array($data['pagination'])) {
             foreach ($candidates as $key) {
                 if (isset($data['pagination'][$key]) && is_numeric($data['pagination'][$key])) {
-                    return (int)$data['pagination'][$key];
+                    return (int) $data['pagination'][$key];
                 }
             }
         }
 
         if (isset($data['count']) && is_numeric($data['count'])) {
             $page_count = count($products);
-            if ($page_count && (int)$data['count'] !== $page_count) {
-                return (int)$data['count'];
+            if ($page_count && (int) $data['count'] !== $page_count) {
+                return (int) $data['count'];
             }
         }
 
         return 0;
     }
 
-    private function updateExistingProduct($oc_product_id, array $prom_product, array $settings, array $languages, $default_category_id) {
+    private function updateExistingProduct($oc_product_id, array $prom_product, array $settings, array $languages, $default_category_id)
+    {
         if (empty($settings['update_existing'])) {
             $settings['map_name'] = false;
             $settings['map_description'] = false;
@@ -359,13 +368,13 @@ class ModelExtensionModulePromSync extends Model {
         $fields = array();
 
         if (!empty($settings['map_price']) && isset($prom_product['price'])) {
-            $fields[] = "price = '" . (float)$prom_product['price'] . "'";
+            $fields[] = "price = '" . (float) $prom_product['price'] . "'";
             $changes[] = 'price';
         }
 
         if (!empty($settings['map_quantity'])) {
             $quantity = $this->mapQuantity($prom_product);
-            $fields[] = "quantity = '" . (int)$quantity . "'";
+            $fields[] = "quantity = '" . (int) $quantity . "'";
             $fields[] = "status = '" . ($quantity > 0 ? 1 : 0) . "'";
             $changes[] = 'quantity';
         }
@@ -380,12 +389,12 @@ class ModelExtensionModulePromSync extends Model {
 
         if (!empty($fields)) {
             $fields[] = "date_modified = NOW()";
-            $this->db->query("UPDATE `" . DB_PREFIX . "product` SET " . implode(', ', $fields) . " WHERE product_id = '" . (int)$oc_product_id . "'");
+            $this->db->query("UPDATE `" . DB_PREFIX . "product` SET " . implode(', ', $fields) . " WHERE product_id = '" . (int) $oc_product_id . "'");
         }
 
         if (!empty($settings['map_name']) || !empty($settings['map_description'])) {
             foreach ($languages as $language) {
-                $language_id = (int)$language['language_id'];
+                $language_id = (int) $language['language_id'];
                 $texts = $this->getLocalizedTexts($prom_product, $language['code']);
 
                 $name = !empty($settings['map_name']) ? $texts['name'] : null;
@@ -401,7 +410,7 @@ class ModelExtensionModulePromSync extends Model {
                 }
 
                 if (!empty($updates)) {
-                    $this->db->query("UPDATE `" . DB_PREFIX . "product_description` SET " . implode(', ', $updates) . " WHERE product_id = '" . (int)$oc_product_id . "' AND language_id = '" . (int)$language_id . "'");
+                    $this->db->query("UPDATE `" . DB_PREFIX . "product_description` SET " . implode(', ', $updates) . " WHERE product_id = '" . (int) $oc_product_id . "' AND language_id = '" . (int) $language_id . "'");
                 }
             }
             if (!empty($settings['map_name'])) {
@@ -412,12 +421,12 @@ class ModelExtensionModulePromSync extends Model {
             }
         }
 
-        if (!empty($settings['map_groups']) || (int)$default_category_id > 0) {
+        if (!empty($settings['map_groups']) || (int) $default_category_id > 0) {
             $category_ids = $this->getCategoryIdsForPromProduct($prom_product, $settings, $default_category_id, $languages);
             if (!empty($category_ids)) {
-                $this->db->query("DELETE FROM `" . DB_PREFIX . "product_to_category` WHERE product_id = '" . (int)$oc_product_id . "'");
+                $this->db->query("DELETE FROM `" . DB_PREFIX . "product_to_category` WHERE product_id = '" . (int) $oc_product_id . "'");
                 foreach ($category_ids as $category_id) {
-                    $this->db->query("INSERT INTO `" . DB_PREFIX . "product_to_category` SET product_id = '" . (int)$oc_product_id . "', category_id = '" . (int)$category_id . "'");
+                    $this->db->query("INSERT INTO `" . DB_PREFIX . "product_to_category` SET product_id = '" . (int) $oc_product_id . "', category_id = '" . (int) $category_id . "'");
                 }
                 $changes[] = 'categories';
             }
@@ -425,22 +434,27 @@ class ModelExtensionModulePromSync extends Model {
 
         if (!empty($settings['map_images'])) {
             $image_urls = $this->collectImageUrls($prom_product);
-            if (!empty($image_urls)) {
-                $main_image = $this->downloadImage($image_urls[0]);
-                if ($main_image) {
-                    $this->db->query("UPDATE `" . DB_PREFIX . "product` SET image = '" . $this->db->escape($main_image) . "' WHERE product_id = '" . (int)$oc_product_id . "'");
-                    $this->db->query("DELETE FROM `" . DB_PREFIX . "product_image` WHERE product_id = '" . (int)$oc_product_id . "'");
+            $main_image_set = false;
+            $downloaded_count = 0;
 
-                    $sort = 0;
-                    foreach (array_slice($image_urls, 1) as $url) {
-                        $local = $this->downloadImage($url);
-                        if ($local) {
-                            $this->db->query("INSERT INTO `" . DB_PREFIX . "product_image` SET product_id = '" . (int)$oc_product_id . "', image = '" . $this->db->escape($local) . "', sort_order = '" . (int)$sort . "'");
-                            $sort++;
-                        }
+            foreach ($image_urls as $url) {
+                $local = $this->downloadImage($url);
+                if ($local) {
+                    if (!$main_image_set) {
+                        $this->db->query("UPDATE `" . DB_PREFIX . "product` SET image = '" . $this->db->escape($local) . "' WHERE product_id = '" . (int) $oc_product_id . "'");
+                        $this->db->query("DELETE FROM `" . DB_PREFIX . "product_image` WHERE product_id = '" . (int) $oc_product_id . "'");
+                        $main_image_set = true;
+                        $changes[] = 'images';
+                    } else {
+                        $sort = $downloaded_count - 1;
+                        $this->db->query("INSERT INTO `" . DB_PREFIX . "product_image` SET product_id = '" . (int) $oc_product_id . "', image = '" . $this->db->escape($local) . "', sort_order = '" . (int) $sort . "'");
                     }
-                    $changes[] = 'images';
+                    $downloaded_count++;
                 }
+            }
+
+            if ($downloaded_count > 0) {
+                $this->logMessage(sprintf('PromSync: processed %d images for product oc_id=%d', $downloaded_count, $oc_product_id));
             }
         }
 
@@ -455,16 +469,17 @@ class ModelExtensionModulePromSync extends Model {
         }
 
         if (!empty($changes)) {
-            $prom_id = !empty($prom_product['id']) ? (int)$prom_product['id'] : 0;
-            $this->logMessage(sprintf('PromSync: updated product prom_id=%d oc_id=%d changes=%s', $prom_id, (int)$oc_product_id, implode(', ', array_unique($changes))));
+            $prom_id = !empty($prom_product['id']) ? (int) $prom_product['id'] : 0;
+            $this->logMessage(sprintf('PromSync: updated product prom_id=%d oc_id=%d changes=%s', $prom_id, (int) $oc_product_id, implode(', ', array_unique($changes))));
         }
     }
 
-    private function buildNewProductData(array $prom_product, array $settings, array $languages, $default_category_id) {
+    private function buildNewProductData(array $prom_product, array $settings, array $languages, $default_category_id)
+    {
         $quantity = $this->mapQuantity($prom_product);
-        $price = isset($prom_product['price']) ? (float)$prom_product['price'] : 0.0;
-        $sku = !empty($prom_product['sku']) ? (string)$prom_product['sku'] : '';
-        $model = $sku ? $sku : 'PROM-' . (int)$prom_product['id'];
+        $price = isset($prom_product['price']) ? (float) $prom_product['price'] : 0.0;
+        $sku = !empty($prom_product['sku']) ? (string) $prom_product['sku'] : '';
+        $model = $sku ? $sku : 'PROM-' . (int) $prom_product['id'];
 
         $product_description = array();
         foreach ($languages as $language) {
@@ -485,13 +500,15 @@ class ModelExtensionModulePromSync extends Model {
         $product_images = array();
         if (!empty($settings['map_images'])) {
             $image_urls = $this->collectImageUrls($prom_product);
-            if (!empty($image_urls)) {
-                $image = $this->downloadImage($image_urls[0]);
-                $sort = 0;
-                foreach (array_slice($image_urls, 1) as $url) {
-                    $local = $this->downloadImage($url);
-                    if ($local) {
-                        $product_images[] = array('image' => $local, 'sort_order' => $sort++);
+            $main_image_set = false;
+            foreach ($image_urls as $url) {
+                $local = $this->downloadImage($url);
+                if ($local) {
+                    if (!$main_image_set) {
+                        $image = $local;
+                        $main_image_set = true;
+                    } else {
+                        $product_images[] = array('image' => $local, 'sort_order' => count($product_images));
                     }
                 }
             }
@@ -517,7 +534,7 @@ class ModelExtensionModulePromSync extends Model {
             'quantity' => $quantity,
             'minimum' => 1,
             'subtract' => 1,
-            'stock_status_id' => (int)$this->config->get('config_stock_status_id'),
+            'stock_status_id' => (int) $this->config->get('config_stock_status_id'),
             'date_available' => date('Y-m-d'),
             'manufacturer_id' => 0,
             'shipping' => 1,
@@ -526,11 +543,11 @@ class ModelExtensionModulePromSync extends Model {
             'tax_class_id' => 0,
             'status' => $quantity > 0 ? 1 : 0,
             'weight' => 0,
-            'weight_class_id' => (int)$this->config->get('config_weight_class_id'),
+            'weight_class_id' => (int) $this->config->get('config_weight_class_id'),
             'length' => 0,
             'width' => 0,
             'height' => 0,
-            'length_class_id' => (int)$this->config->get('config_length_class_id'),
+            'length_class_id' => (int) $this->config->get('config_length_class_id'),
             'sort_order' => 0,
             'product_description' => $product_description,
             'product_category' => $category_ids,
@@ -550,9 +567,10 @@ class ModelExtensionModulePromSync extends Model {
         );
     }
 
-    private function mapQuantity(array $prom_product) {
+    private function mapQuantity(array $prom_product)
+    {
         if (isset($prom_product['quantity_in_stock'])) {
-            return (int)$prom_product['quantity_in_stock'];
+            return (int) $prom_product['quantity_in_stock'];
         }
 
         if (isset($prom_product['in_stock'])) {
@@ -566,9 +584,10 @@ class ModelExtensionModulePromSync extends Model {
         return 0;
     }
 
-    private function getLocalizedTexts(array $prom_product, $language_code) {
-        $base_name = !empty($prom_product['name']) ? (string)$prom_product['name'] : 'Prom product';
-        $base_description = !empty($prom_product['description']) ? (string)$prom_product['description'] : '';
+    private function getLocalizedTexts(array $prom_product, $language_code)
+    {
+        $base_name = !empty($prom_product['name']) ? (string) $prom_product['name'] : 'Prom product';
+        $base_description = !empty($prom_product['description']) ? (string) $prom_product['description'] : '';
 
         $lang_key = strtolower(substr($language_code, 0, 2));
         $keys = array($lang_key);
@@ -588,7 +607,7 @@ class ModelExtensionModulePromSync extends Model {
 
             if ($base_name === $prom_product['name']) {
                 foreach ($prom_product['name_multilang'] as $key => $value) {
-                    if (strtolower(substr((string)$key, 0, 2)) === $lang_key && $value !== '') {
+                    if (strtolower(substr((string) $key, 0, 2)) === $lang_key && $value !== '') {
                         $base_name = $value;
                         break;
                     }
@@ -606,7 +625,7 @@ class ModelExtensionModulePromSync extends Model {
 
             if ($base_description === $prom_product['description']) {
                 foreach ($prom_product['description_multilang'] as $key => $value) {
-                    if (strtolower(substr((string)$key, 0, 2)) === $lang_key && $value !== '') {
+                    if (strtolower(substr((string) $key, 0, 2)) === $lang_key && $value !== '') {
                         $base_description = $value;
                         break;
                     }
@@ -617,7 +636,8 @@ class ModelExtensionModulePromSync extends Model {
         return array('name' => $base_name, 'description' => $base_description);
     }
 
-    private function buildProductSeoUrl(array $prom_product, array $languages) {
+    private function buildProductSeoUrl(array $prom_product, array $languages)
+    {
         $seo = array();
         $store_id = 0;
 
@@ -625,7 +645,7 @@ class ModelExtensionModulePromSync extends Model {
             $texts = $this->getLocalizedTexts($prom_product, $language['code']);
             $keyword = $this->slugify($texts['name']);
             if ($keyword === '') {
-                $keyword = 'prom-' . (int)$prom_product['id'];
+                $keyword = 'prom-' . (int) $prom_product['id'];
             }
             if (!isset($seo[$store_id])) {
                 $seo[$store_id] = array();
@@ -636,8 +656,9 @@ class ModelExtensionModulePromSync extends Model {
         return $seo;
     }
 
-    private function ensureProductSeoUrl($product_id, array $prom_product, array $languages) {
-        $query = $this->db->query("SELECT seo_url_id FROM `" . DB_PREFIX . "seo_url` WHERE query = 'product_id=" . (int)$product_id . "' LIMIT 1");
+    private function ensureProductSeoUrl($product_id, array $prom_product, array $languages)
+    {
+        $query = $this->db->query("SELECT seo_url_id FROM `" . DB_PREFIX . "seo_url` WHERE query = 'product_id=" . (int) $product_id . "' LIMIT 1");
         if (!empty($query->row)) {
             return false;
         }
@@ -648,15 +669,16 @@ class ModelExtensionModulePromSync extends Model {
                 if ($keyword === '') {
                     continue;
                 }
-                $this->db->query("INSERT INTO `" . DB_PREFIX . "seo_url` SET store_id = '" . (int)$store_id . "', language_id = '" . (int)$language_id . "', query = 'product_id=" . (int)$product_id . "', keyword = '" . $this->db->escape($keyword) . "'");
+                $this->db->query("INSERT INTO `" . DB_PREFIX . "seo_url` SET store_id = '" . (int) $store_id . "', language_id = '" . (int) $language_id . "', query = 'product_id=" . (int) $product_id . "', keyword = '" . $this->db->escape($keyword) . "'");
             }
         }
 
         return true;
     }
 
-    private function slugify($value) {
-        $value = trim((string)$value);
+    private function slugify($value)
+    {
+        $value = trim((string) $value);
         if ($value === '') {
             return '';
         }
@@ -677,7 +699,8 @@ class ModelExtensionModulePromSync extends Model {
         return $value;
     }
 
-    private function collectImageUrls(array $prom_product) {
+    private function collectImageUrls(array $prom_product)
+    {
         $urls = array();
 
         $urls = array_merge($urls, $this->extractImageUrls(isset($prom_product['main_image']) ? $prom_product['main_image'] : null));
@@ -693,7 +716,7 @@ class ModelExtensionModulePromSync extends Model {
 
         $filtered = array();
         foreach ($urls as $url) {
-            $url = trim((string)$url);
+            $url = trim((string) $url);
             if ($url !== '' && preg_match('/^https?:\\/\\//i', $url)) {
                 $filtered[] = $url;
             }
@@ -702,7 +725,8 @@ class ModelExtensionModulePromSync extends Model {
         return array_values(array_unique($filtered));
     }
 
-    private function extractImageUrls($value) {
+    private function extractImageUrls($value)
+    {
         $urls = array();
 
         if (is_string($value)) {
@@ -711,12 +735,15 @@ class ModelExtensionModulePromSync extends Model {
         }
 
         if (is_array($value)) {
-            $known_keys = array('url', 'href', 'file', 'original', 'big', 'medium', 'small');
-            foreach ($known_keys as $key) {
-                if (!empty($value[$key])) {
-                    $urls[] = $value[$key];
-                }
+            // Prioritize 'url' key if it exists in the object
+            if (!empty($value['url'])) {
+                $urls[] = $value['url'];
+                return $urls;
             }
+
+            // Fallback: check for other common keys just in case, but 'url' is the standard
+            // We can check 'file' or 'original' if 'url' is missing?
+            // The user insisted on 'url' being the clear key, so let's stick to the list logic for fallback.
 
             foreach ($value as $item) {
                 if (is_string($item)) {
@@ -730,7 +757,8 @@ class ModelExtensionModulePromSync extends Model {
         return $urls;
     }
 
-    private function getCountryValue(array $prom_product) {
+    private function getCountryValue(array $prom_product)
+    {
         $direct_keys = array(
             'country',
             'country_of_origin',
@@ -743,7 +771,7 @@ class ModelExtensionModulePromSync extends Model {
 
         foreach ($direct_keys as $key) {
             if (!empty($prom_product[$key])) {
-                return trim((string)$prom_product[$key]);
+                return trim((string) $prom_product[$key]);
             }
         }
 
@@ -764,7 +792,8 @@ class ModelExtensionModulePromSync extends Model {
         return '';
     }
 
-    private function getCountryValues(array $prom_product, array $languages) {
+    private function getCountryValues(array $prom_product, array $languages)
+    {
         $values = array();
 
         $value = $this->getCountryValue($prom_product);
@@ -775,18 +804,18 @@ class ModelExtensionModulePromSync extends Model {
             return $values;
         }
 
-        $ru_default = trim((string)$this->config->get('module_prom_sync_country_ru'));
-        $uk_default = trim((string)$this->config->get('module_prom_sync_country_uk'));
+        $ru_default = trim((string) $this->config->get('module_prom_sync_country_ru'));
+        $uk_default = trim((string) $this->config->get('module_prom_sync_country_uk'));
 
         if ($ru_default === '' && $uk_default === '') {
-            $domain = strtolower((string)$this->config->get('module_prom_sync_domain'));
+            $domain = strtolower((string) $this->config->get('module_prom_sync_domain'));
             if ($domain === '' || substr($domain, -3) === '.ua') {
                 $ru_default = 'Украина';
                 $uk_default = 'Україна';
             }
         }
         if ($ru_default === '' && $uk_default === '') {
-            $domain = (string)$this->config->get('module_prom_sync_domain');
+            $domain = (string) $this->config->get('module_prom_sync_domain');
             if ($domain && stripos($domain, '.ua') !== false) {
                 $ru_default = 'Украина';
                 $uk_default = 'Україна';
@@ -812,7 +841,8 @@ class ModelExtensionModulePromSync extends Model {
         return $values;
     }
 
-    private function extractCountryFromAttributes($attributes) {
+    private function extractCountryFromAttributes($attributes)
+    {
         if (!is_array($attributes)) {
             return '';
         }
@@ -820,14 +850,14 @@ class ModelExtensionModulePromSync extends Model {
         foreach ($attributes as $key => $value) {
             if (!is_int($key) && $this->matchesCountryAttributeName($key)) {
                 if (is_scalar($value)) {
-                    return trim((string)$value);
+                    return trim((string) $value);
                 }
                 if (is_array($value)) {
                     if (!empty($value['value'])) {
-                        return trim((string)$value['value']);
+                        return trim((string) $value['value']);
                     }
                     if (!empty($value['text'])) {
-                        return trim((string)$value['text']);
+                        return trim((string) $value['text']);
                     }
                 }
             }
@@ -867,14 +897,14 @@ class ModelExtensionModulePromSync extends Model {
 
             foreach (array('value', 'text') as $key) {
                 if (!empty($item[$key]) && is_scalar($item[$key])) {
-                    return trim((string)$item[$key]);
+                    return trim((string) $item[$key]);
                 }
             }
 
             if (!empty($item['value_multilang']) && is_array($item['value_multilang'])) {
                 foreach ($item['value_multilang'] as $value) {
                     if ($value !== '') {
-                        return trim((string)$value);
+                        return trim((string) $value);
                     }
                 }
             }
@@ -883,7 +913,8 @@ class ModelExtensionModulePromSync extends Model {
         return '';
     }
 
-    private function matchesCountryAttributeName($name) {
+    private function matchesCountryAttributeName($name)
+    {
         $normalized = $this->normalizeAttributeName($name);
         if ($normalized === '') {
             return false;
@@ -923,8 +954,9 @@ class ModelExtensionModulePromSync extends Model {
         return false;
     }
 
-    private function normalizeAttributeName($name) {
-        $name = trim((string)$name);
+    private function normalizeAttributeName($name)
+    {
+        $name = trim((string) $name);
         if ($name === '') {
             return '';
         }
@@ -939,7 +971,8 @@ class ModelExtensionModulePromSync extends Model {
         return $name;
     }
 
-    private function buildCountryAttribute(array $values, array $languages) {
+    private function buildCountryAttribute(array $values, array $languages)
+    {
         $attribute_id = $this->ensureCountryAttribute($languages);
         if (!$attribute_id) {
             return array();
@@ -949,7 +982,7 @@ class ModelExtensionModulePromSync extends Model {
 
         $descriptions = array();
         foreach ($languages as $language) {
-            $language_id = (int)$language['language_id'];
+            $language_id = (int) $language['language_id'];
             $text = isset($values[$language_id]) ? $values[$language_id] : $default_value;
             $descriptions[$language_id] = array('text' => $text);
         }
@@ -962,7 +995,8 @@ class ModelExtensionModulePromSync extends Model {
         );
     }
 
-    private function setCountryAttribute($product_id, array $values, array $languages) {
+    private function setCountryAttribute($product_id, array $values, array $languages)
+    {
         $attribute_id = $this->ensureCountryAttribute($languages);
         if (!$attribute_id) {
             return;
@@ -970,16 +1004,17 @@ class ModelExtensionModulePromSync extends Model {
 
         $default_value = $this->getDefaultAttributeValue($values);
 
-        $this->db->query("DELETE FROM `" . DB_PREFIX . "product_attribute` WHERE product_id = '" . (int)$product_id . "' AND attribute_id = '" . (int)$attribute_id . "'");
+        $this->db->query("DELETE FROM `" . DB_PREFIX . "product_attribute` WHERE product_id = '" . (int) $product_id . "' AND attribute_id = '" . (int) $attribute_id . "'");
         foreach ($languages as $language) {
-            $language_id = (int)$language['language_id'];
+            $language_id = (int) $language['language_id'];
             $text_value = isset($values[$language_id]) ? $values[$language_id] : $default_value;
             $text = $this->db->escape($text_value);
-            $this->db->query("INSERT INTO `" . DB_PREFIX . "product_attribute` SET product_id = '" . (int)$product_id . "', attribute_id = '" . (int)$attribute_id . "', language_id = '" . (int)$language_id . "', text = '" . $text . "'");
+            $this->db->query("INSERT INTO `" . DB_PREFIX . "product_attribute` SET product_id = '" . (int) $product_id . "', attribute_id = '" . (int) $attribute_id . "', language_id = '" . (int) $language_id . "', text = '" . $text . "'");
         }
     }
 
-    private function getDefaultAttributeValue(array $values) {
+    private function getDefaultAttributeValue(array $values)
+    {
         foreach ($values as $value) {
             if ($value !== '') {
                 return $value;
@@ -988,9 +1023,10 @@ class ModelExtensionModulePromSync extends Model {
         return '';
     }
 
-    private function ensureCountryAttribute(array $languages) {
+    private function ensureCountryAttribute(array $languages)
+    {
         if (isset($this->attribute_cache['country'])) {
-            return (int)$this->attribute_cache['country'];
+            return (int) $this->attribute_cache['country'];
         }
 
         $names = $this->getCountryAttributeNames($languages);
@@ -1003,49 +1039,51 @@ class ModelExtensionModulePromSync extends Model {
             }
             $query = $this->db->query("SELECT attribute_id FROM `" . DB_PREFIX . "attribute_description` WHERE name IN (" . implode(', ', $escaped) . ") LIMIT 1");
             if (!empty($query->row)) {
-                $this->attribute_cache['country'] = (int)$query->row['attribute_id'];
-                return (int)$query->row['attribute_id'];
+                $this->attribute_cache['country'] = (int) $query->row['attribute_id'];
+                return (int) $query->row['attribute_id'];
             }
         }
 
         $group_id = $this->ensureAttributeGroup($languages);
-        $this->db->query("INSERT INTO `" . DB_PREFIX . "attribute` SET attribute_group_id = '" . (int)$group_id . "', sort_order = '0'");
-        $attribute_id = (int)$this->db->getLastId();
+        $this->db->query("INSERT INTO `" . DB_PREFIX . "attribute` SET attribute_group_id = '" . (int) $group_id . "', sort_order = '0'");
+        $attribute_id = (int) $this->db->getLastId();
 
         foreach ($languages as $language) {
-            $language_id = (int)$language['language_id'];
+            $language_id = (int) $language['language_id'];
             $name = $names[$language_id];
-            $this->db->query("INSERT INTO `" . DB_PREFIX . "attribute_description` SET attribute_id = '" . (int)$attribute_id . "', language_id = '" . (int)$language_id . "', name = '" . $this->db->escape($name) . "'");
+            $this->db->query("INSERT INTO `" . DB_PREFIX . "attribute_description` SET attribute_id = '" . (int) $attribute_id . "', language_id = '" . (int) $language_id . "', name = '" . $this->db->escape($name) . "'");
         }
 
         $this->attribute_cache['country'] = $attribute_id;
         return $attribute_id;
     }
 
-    private function ensureAttributeGroup(array $languages) {
+    private function ensureAttributeGroup(array $languages)
+    {
         if (isset($this->attribute_cache['group'])) {
-            return (int)$this->attribute_cache['group'];
+            return (int) $this->attribute_cache['group'];
         }
 
         $group_name = 'Prom Sync';
         $query = $this->db->query("SELECT attribute_group_id FROM `" . DB_PREFIX . "attribute_group_description` WHERE name = '" . $this->db->escape($group_name) . "' LIMIT 1");
         if (!empty($query->row)) {
-            $this->attribute_cache['group'] = (int)$query->row['attribute_group_id'];
-            return (int)$query->row['attribute_group_id'];
+            $this->attribute_cache['group'] = (int) $query->row['attribute_group_id'];
+            return (int) $query->row['attribute_group_id'];
         }
 
         $this->db->query("INSERT INTO `" . DB_PREFIX . "attribute_group` SET sort_order = '0'");
-        $group_id = (int)$this->db->getLastId();
+        $group_id = (int) $this->db->getLastId();
 
         foreach ($languages as $language) {
-            $this->db->query("INSERT INTO `" . DB_PREFIX . "attribute_group_description` SET attribute_group_id = '" . (int)$group_id . "', language_id = '" . (int)$language['language_id'] . "', name = '" . $this->db->escape($group_name) . "'");
+            $this->db->query("INSERT INTO `" . DB_PREFIX . "attribute_group_description` SET attribute_group_id = '" . (int) $group_id . "', language_id = '" . (int) $language['language_id'] . "', name = '" . $this->db->escape($group_name) . "'");
         }
 
         $this->attribute_cache['group'] = $group_id;
         return $group_id;
     }
 
-    private function getCountryAttributeNames(array $languages) {
+    private function getCountryAttributeNames(array $languages)
+    {
         $names = array();
         foreach ($languages as $language) {
             $code = strtolower(substr($language['code'], 0, 2));
@@ -1060,43 +1098,163 @@ class ModelExtensionModulePromSync extends Model {
         return $names;
     }
 
-    private function downloadImage($url) {
-        $url = trim((string)$url);
+    private function downloadImage($url)
+    {
+        $url = trim((string) $url);
         if ($url === '') {
             return '';
         }
 
         $data = $this->fetchUrl($url, $status, $error);
         if ($data === false || $data === '') {
-            $this->log->write('PromSync: image download failed for ' . $url . ' (' . $error . ', status=' . (int)$status . ')');
+            $this->logMessage(sprintf('PromSync: image download failed for %s (error=%s, status=%d)', $url, $error, (int) $status));
             return '';
+        }
+
+        // Auto-convert WebP to JPG for OpenCart compatibility
+        if (function_exists('getimagesizefromstring') && function_exists('imagecreatefromstring') && function_exists('imagejpeg')) {
+            $info = @getimagesizefromstring($data);
+            if ($info && isset($info[2]) && defined('IMAGETYPE_WEBP') && $info[2] === IMAGETYPE_WEBP) {
+                $im = @imagecreatefromstring($data);
+                if ($im) {
+                    ob_start();
+                    imagejpeg($im, null, 90);
+                    $new_data = ob_get_clean();
+                    imagedestroy($im);
+                    if ($new_data) {
+                        $data = $new_data;
+                        $this->logMessage('PromSync: converted WebP to JPG for ' . $url);
+                    }
+                }
+            }
+        }
+
+        // Validate image data
+        if (function_exists('getimagesizefromstring')) {
+            $info = @getimagesizefromstring($data);
+            if ($info === false) {
+                // Try one more check: maybe it is SVG, which getimagesizefromstring fails on sometimes?
+                // But for standard Prom sync we expect JPG/PNG usually.
+                // Or simply log response preview if it is text
+                $preview = substr($data, 0, 100);
+                $this->logMessage(sprintf('PromSync: invalid image data for %s. Preview: %s', $url, htmlspecialchars($preview)));
+                return '';
+            }
         }
 
         $ext = $this->guessImageExtension($url, $data);
         $filename = 'catalog/prom_sync/' . md5($url) . '.' . $ext;
+        // DIR_IMAGE usually includes trailing slash
         $full = rtrim(DIR_IMAGE, '/') . '/' . $filename;
 
         if (!is_file($full)) {
             $dir = dirname($full);
             if (!is_dir($dir) && !@mkdir($dir, 0777, true)) {
-                $this->log->write('PromSync: failed to create image dir ' . $dir);
+                $this->logMessage('PromSync: failed to create image dir ' . $dir);
                 return '';
             }
             if (!is_writable($dir)) {
-                $this->log->write('PromSync: image dir not writable ' . $dir);
+                $this->logMessage('PromSync: image dir not writable ' . $dir);
                 return '';
             }
 
             if (@file_put_contents($full, $data) === false) {
-                $this->log->write('PromSync: failed to write image file ' . $full);
+                $this->logMessage('PromSync: failed to write image file ' . $full);
                 return '';
             }
+
+            $this->logMessage(sprintf('PromSync: saved new image %s to %s', $url, $filename));
         }
 
-        return is_file($full) ? $filename : '';
+        if (is_file($full)) {
+            // Force cache creation (resize) to prevent empty thumbnails in admin
+            $this->load->model('tool/image');
+
+            // Use absolute path for cache directory creation
+            $path_info = pathinfo($filename);
+            // Construct absolute path to cache directory: DIR_IMAGE + cache/ + catalog/prom_sync
+            // Note: DIR_IMAGE usually ends with /, $filename is catalog/prom_sync/file.jpg
+            $relative_dir = 'cache/' . $path_info['dirname']; // cache/catalog/prom_sync
+            $full_cache_dir = rtrim(DIR_IMAGE, '/') . '/' . $relative_dir;
+
+            if (!is_dir($full_cache_dir)) {
+                // Try to create with full permissions
+                if (!@mkdir($full_cache_dir, 0777, true)) {
+                    $this->logMessage('PromSync: FAILED to create cache dir: ' . $full_cache_dir);
+                } else {
+                    // Sometimes permissions need to be set explicitly after creation
+                    @chmod($full_cache_dir, 0777);
+                }
+            }
+
+            // Sizes to pre-generate based on standard OpenCart defaults:
+            // 40x40 (Admin List), 100x100 (Admin Thumb), 228x228 (Catalog Thumb), 500x500 (Popup), 74x74 (Additional)
+            $sizes = array(
+                array(40, 40),
+                array(100, 100),
+                array(228, 228),
+                array(500, 500),
+                array(74, 74)
+            );
+
+            foreach ($sizes as $size) {
+                $w = $size[0];
+                $h = $size[1];
+
+                $resized = $this->model_tool_image->resize($filename, $w, $h);
+
+                // Log the resized URL to see if it is generated correctly
+                $this->logMessage(sprintf('PromSync: image resized %dx%d %s -> %s', $w, $h, $filename, $resized));
+
+                // Check if physical cache file was created
+                $path_info = pathinfo($filename);
+                $dirname = str_replace('\\', '/', $path_info['dirname']);
+                $cache_filename = 'cache/' . $dirname . '/' . $path_info['filename'] . '-' . $w . 'x' . $h . '.' . $path_info['extension'];
+                $full_cache_file = rtrim(DIR_IMAGE, '/') . '/' . $cache_filename;
+
+                if (!is_file($full_cache_file)) {
+                    $this->logMessage(sprintf('PromSync: Cache file not found for %dx%d via standard resize. Attempting manual resize fallback...', $w, $h));
+
+                    // Manual Fallback using GD
+                    if (function_exists('imagecreatefromstring') && function_exists('imagecreatetruecolor') && function_exists('imagecopyresampled') && function_exists('imagejpeg')) {
+                        $src = @imagecreatefromstring($data);
+                        if ($src) {
+                            $width = imagesx($src);
+                            $height = imagesy($src);
+
+                            $dst = imagecreatetruecolor($w, $h);
+                            if ($dst) {
+                                // Preserve transparency for PNG/WebP if applicable, though we likely have JPG here
+                                imagealphablending($dst, false);
+                                imagesavealpha($dst, true);
+                                $transparent = imagecolorallocatealpha($dst, 255, 255, 255, 127);
+                                imagefilledrectangle($dst, 0, 0, $w, $h, $transparent);
+
+                                imagecopyresampled($dst, $src, 0, 0, 0, 0, $w, $h, $width, $height);
+
+                                if ($path_info['extension'] == 'png') {
+                                    imagepng($dst, $full_cache_file);
+                                } else {
+                                    imagejpeg($dst, $full_cache_file, 90);
+                                }
+
+                                imagedestroy($dst);
+                                $this->logMessage(sprintf('PromSync: Manual resize fallback SUCCESS for %dx%d. Saved to %s', $w, $h, $full_cache_file));
+                            }
+                            imagedestroy($src);
+                        }
+                    }
+                }
+            }
+
+            return $filename;
+        }
+
+        return '';
     }
 
-    private function fetchUrl($url, &$status = 0, &$error = '') {
+    private function fetchUrl($url, &$status = 0, &$error = '')
+    {
         $status = 0;
         $error = '';
 
@@ -1117,20 +1275,21 @@ class ModelExtensionModulePromSync extends Model {
         return $data;
     }
 
-    private function curlGet($url, $verify_ssl, &$status = 0, &$error = '') {
+    private function curlGet($url, $verify_ssl, &$status = 0, &$error = '')
+    {
         $ch = curl_init($url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_TIMEOUT, 30);
         curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
         curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
         curl_setopt($ch, CURLOPT_MAXREDIRS, 3);
-        curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (PromSync Image Fetch)');
+        curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, $verify_ssl ? 1 : 0);
         curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, $verify_ssl ? 2 : 0);
 
         $data = curl_exec($ch);
         $error = curl_error($ch);
-        $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
 
         if ($data === false || $status >= 400) {
@@ -1140,16 +1299,9 @@ class ModelExtensionModulePromSync extends Model {
         return $data;
     }
 
-    private function guessImageExtension($url, $data = null) {
-        $path = parse_url($url, PHP_URL_PATH);
-        $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
-        if ($ext) {
-            if ($ext === 'jpeg') {
-                $ext = 'jpg';
-            }
-            return $ext;
-        }
-
+    private function guessImageExtension($url, $data = null)
+    {
+        // Try content detection first because Prom might send WebP with .jpg extension
         if ($data !== null && function_exists('getimagesizefromstring')) {
             $info = @getimagesizefromstring($data);
             if ($info && isset($info[2])) {
@@ -1166,24 +1318,38 @@ class ModelExtensionModulePromSync extends Model {
             }
         }
 
+        $path = parse_url($url, PHP_URL_PATH);
+        $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+        if ($ext) {
+            if ($ext === 'jpeg') {
+                $ext = 'jpg';
+            }
+            return $ext;
+        }
+
         return 'jpg';
     }
 
-    private function getCategoryIdsForPromProduct(array $prom_product, array $settings, $default_category_id, array $languages) {
+    private function getCategoryIdsForPromProduct(array $prom_product, array $settings, $default_category_id, array $languages)
+    {
         $category_ids = array();
 
-        if (!empty($settings['map_groups'])) {
+        if (!empty($settings['single_category'])) {
+            // If Single Category mode is ON, ignore Prom groups mapping logic
+            // We will just return the default category ID below
+            // Use default category as the main category
+        } elseif (!empty($settings['map_groups'])) {
             $group = null;
             if (!empty($prom_product['group'])) {
                 if (is_array($prom_product['group'])) {
                     $group = $prom_product['group'];
                 } else {
-                    $group = array('id' => (int)$prom_product['group']);
+                    $group = array('id' => (int) $prom_product['group']);
                 }
             } elseif (!empty($prom_product['group_id'])) {
-                $group = array('id' => (int)$prom_product['group_id']);
+                $group = array('id' => (int) $prom_product['group_id']);
             } elseif (!empty($prom_product['category_id'])) {
-                $group = array('id' => (int)$prom_product['category_id']);
+                $group = array('id' => (int) $prom_product['category_id']);
             }
 
             if ($group && !empty($group['id'])) {
@@ -1201,11 +1367,12 @@ class ModelExtensionModulePromSync extends Model {
         return $category_ids;
     }
 
-    private function ensureCategoryForGroup(array $group, array $settings, array $languages) {
-        $prom_group_id = (int)$group['id'];
-        $query = $this->db->query("SELECT oc_category_id FROM `" . DB_PREFIX . "prom_sync_group` WHERE prom_group_id = '" . (int)$prom_group_id . "' LIMIT 1");
+    private function ensureCategoryForGroup(array $group, array $settings, array $languages)
+    {
+        $prom_group_id = (int) $group['id'];
+        $query = $this->db->query("SELECT oc_category_id FROM `" . DB_PREFIX . "prom_sync_group` WHERE prom_group_id = '" . (int) $prom_group_id . "' LIMIT 1");
         if (!empty($query->row)) {
-            return (int)$query->row['oc_category_id'];
+            return (int) $query->row['oc_category_id'];
         }
 
         if (empty($settings['create_categories'])) {
@@ -1214,15 +1381,15 @@ class ModelExtensionModulePromSync extends Model {
 
         $parent_id = 0;
         if (!empty($group['parent_group_id'])) {
-            $parent_query = $this->db->query("SELECT oc_category_id FROM `" . DB_PREFIX . "prom_sync_group` WHERE prom_group_id = '" . (int)$group['parent_group_id'] . "' LIMIT 1");
+            $parent_query = $this->db->query("SELECT oc_category_id FROM `" . DB_PREFIX . "prom_sync_group` WHERE prom_group_id = '" . (int) $group['parent_group_id'] . "' LIMIT 1");
             if (!empty($parent_query->row)) {
-                $parent_id = (int)$parent_query->row['oc_category_id'];
+                $parent_id = (int) $parent_query->row['oc_category_id'];
             }
         }
 
         $this->load->model('catalog/category');
 
-        $name = !empty($group['name']) ? (string)$group['name'] : ('Prom Group ' . $prom_group_id);
+        $name = !empty($group['name']) ? (string) $group['name'] : ('Prom Group ' . $prom_group_id);
         $category_description = array();
         foreach ($languages as $language) {
             $category_description[$language['language_id']] = array(
@@ -1247,64 +1414,73 @@ class ModelExtensionModulePromSync extends Model {
         );
 
         $oc_category_id = $this->model_catalog_category->addCategory($category_data);
-        $this->db->query("INSERT INTO `" . DB_PREFIX . "prom_sync_group` SET prom_group_id = '" . (int)$prom_group_id . "', oc_category_id = '" . (int)$oc_category_id . "'");
+        $this->db->query("INSERT INTO `" . DB_PREFIX . "prom_sync_group` SET prom_group_id = '" . (int) $prom_group_id . "', oc_category_id = '" . (int) $oc_category_id . "'");
 
         return $oc_category_id;
     }
 
-    private function getProductMappingByPromId($prom_id) {
-        $query = $this->db->query("SELECT * FROM `" . DB_PREFIX . "prom_sync_product` WHERE prom_product_id = '" . (int)$prom_id . "' LIMIT 1");
+    private function getProductMappingByPromId($prom_id)
+    {
+        $query = $this->db->query("SELECT * FROM `" . DB_PREFIX . "prom_sync_product` WHERE prom_product_id = '" . (int) $prom_id . "' LIMIT 1");
         return !empty($query->row) ? $query->row : null;
     }
 
-    private function getProductMappingByOcId($product_id) {
-        $query = $this->db->query("SELECT * FROM `" . DB_PREFIX . "prom_sync_product` WHERE oc_product_id = '" . (int)$product_id . "' LIMIT 1");
+    private function getProductMappingByOcId($product_id)
+    {
+        $query = $this->db->query("SELECT * FROM `" . DB_PREFIX . "prom_sync_product` WHERE oc_product_id = '" . (int) $product_id . "' LIMIT 1");
         return !empty($query->row) ? $query->row : null;
     }
 
-    private function getProductQuantity($product_id) {
-        $query = $this->db->query("SELECT quantity FROM `" . DB_PREFIX . "product` WHERE product_id = '" . (int)$product_id . "' LIMIT 1");
+    private function getProductQuantity($product_id)
+    {
+        $query = $this->db->query("SELECT quantity FROM `" . DB_PREFIX . "product` WHERE product_id = '" . (int) $product_id . "' LIMIT 1");
         if (!empty($query->row)) {
-            return (int)$query->row['quantity'];
+            return (int) $query->row['quantity'];
         }
         return 0;
     }
 
-    private function getProductMappingByExternalId($external_id) {
+    private function getProductMappingByExternalId($external_id)
+    {
         $query = $this->db->query("SELECT * FROM `" . DB_PREFIX . "prom_sync_product` WHERE prom_external_id = '" . $this->db->escape($external_id) . "' LIMIT 1");
         return !empty($query->row) ? $query->row : null;
     }
 
-    private function setProductMapping($prom_id, $external_id, $oc_product_id, $sku) {
+    private function setProductMapping($prom_id, $external_id, $oc_product_id, $sku)
+    {
         $this->db->query("REPLACE INTO `" . DB_PREFIX . "prom_sync_product` SET
-            prom_product_id = '" . (int)$prom_id . "',
-            prom_external_id = '" . $this->db->escape((string)$external_id) . "',
-            oc_product_id = '" . (int)$oc_product_id . "',
-            oc_sku = '" . $this->db->escape((string)$sku) . "',
+            prom_product_id = '" . (int) $prom_id . "',
+            prom_external_id = '" . $this->db->escape((string) $external_id) . "',
+            oc_product_id = '" . (int) $oc_product_id . "',
+            oc_sku = '" . $this->db->escape((string) $sku) . "',
             date_added = NOW(),
             date_modified = NOW()");
     }
 
-    private function touchProductMapping($prom_id, $external_id, $oc_product_id) {
+    private function touchProductMapping($prom_id, $external_id, $oc_product_id)
+    {
         $this->db->query("UPDATE `" . DB_PREFIX . "prom_sync_product` SET
-            prom_external_id = '" . $this->db->escape((string)$external_id) . "',
+            prom_external_id = '" . $this->db->escape((string) $external_id) . "',
             date_modified = NOW()
-            WHERE prom_product_id = '" . (int)$prom_id . "' AND oc_product_id = '" . (int)$oc_product_id . "'");
+            WHERE prom_product_id = '" . (int) $prom_id . "' AND oc_product_id = '" . (int) $oc_product_id . "'");
     }
 
-    private function getLogger() {
+    private function getLogger()
+    {
         if (!$this->logger) {
             $this->logger = new Log('prom_sync.log');
         }
         return $this->logger;
     }
 
-    private function logMessage($message) {
+    private function logMessage($message)
+    {
         $logger = $this->getLogger();
         $logger->write($message);
     }
 
-    private function encodeJson($data) {
+    private function encodeJson($data)
+    {
         $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         if ($json === false) {
             $json = print_r($data, true);
@@ -1312,39 +1488,44 @@ class ModelExtensionModulePromSync extends Model {
         return $json;
     }
 
-    private function getSettings() {
+    private function getSettings()
+    {
         return array(
             'token' => $this->config->get('module_prom_sync_token'),
             'domain' => $this->config->get('module_prom_sync_domain') ?: 'prom.ua',
             'language' => $this->config->get('module_prom_sync_language'),
-            'default_category_id' => (int)$this->config->get('module_prom_sync_default_category_id'),
+            'default_category_id' => (int) $this->config->get('module_prom_sync_default_category_id'),
             'map_groups' => $this->getBoolSetting('module_prom_sync_map_groups', true),
             'create_categories' => $this->getBoolSetting('module_prom_sync_create_categories', true),
-            'update_existing' => (bool)$this->config->get('module_prom_sync_update_existing'),
-            'map_name' => (bool)$this->config->get('module_prom_sync_map_name'),
-            'map_description' => (bool)$this->config->get('module_prom_sync_map_description'),
-            'map_price' => (bool)$this->config->get('module_prom_sync_map_price'),
-            'map_quantity' => (bool)$this->config->get('module_prom_sync_map_quantity'),
-            'map_sku' => (bool)$this->config->get('module_prom_sync_map_sku'),
+            'update_existing' => (bool) $this->config->get('module_prom_sync_update_existing'),
+            'map_name' => (bool) $this->config->get('module_prom_sync_map_name'),
+            'map_description' => (bool) $this->config->get('module_prom_sync_map_description'),
+            'map_price' => (bool) $this->config->get('module_prom_sync_map_price'),
+            'map_quantity' => (bool) $this->config->get('module_prom_sync_map_quantity'),
+            'map_sku' => (bool) $this->config->get('module_prom_sync_map_sku'),
             'map_images' => $this->getBoolSetting('module_prom_sync_map_images', true),
-            'limit' => (int)$this->config->get('module_prom_sync_limit')
+            'single_category' => $this->getBoolSetting('module_prom_sync_single_category', false),
+            'limit' => (int) $this->config->get('module_prom_sync_limit')
         );
     }
 
-    private function getBoolSetting($key, $default = false) {
+    private function getBoolSetting($key, $default = false)
+    {
         $value = $this->config->get($key);
         if ($value === null || $value === '') {
-            return (bool)$default;
+            return (bool) $default;
         }
-        return (bool)$value;
+        return (bool) $value;
     }
 
-    private function getApi(array $settings) {
+    private function getApi(array $settings)
+    {
         require_once(DIR_SYSTEM . 'library/prom_sync/PromApi.php');
         return new PromSyncApi($settings['token'], $settings['domain'], $settings['language']);
     }
 
-    private function getLanguages() {
+    private function getLanguages()
+    {
         $this->load->model('localisation/language');
         $languages = $this->model_localisation_language->getLanguages();
         $result = array();

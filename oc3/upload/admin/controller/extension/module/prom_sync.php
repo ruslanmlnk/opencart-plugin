@@ -1,8 +1,10 @@
 <?php
-class ControllerExtensionModulePromSync extends Controller {
+class ControllerExtensionModulePromSync extends Controller
+{
     private $error = array();
 
-    public function index() {
+    public function index()
+    {
         $this->load->language('extension/module/prom_sync');
         $this->document->setTitle($this->language->get('heading_title'));
 
@@ -145,6 +147,7 @@ class ControllerExtensionModulePromSync extends Controller {
         $data['module_prom_sync_limit'] = $this->getConfigValue('module_prom_sync_limit', 50);
         $data['module_prom_sync_country_ru'] = $this->getConfigValue('module_prom_sync_country_ru', 'Украина');
         $data['module_prom_sync_country_uk'] = $this->getConfigValue('module_prom_sync_country_uk', 'Україна');
+        $data['module_prom_sync_single_category'] = $this->getConfigValue('module_prom_sync_single_category', 0);
 
         $data['log_content'] = $this->getLogTail(DIR_LOGS . 'prom_sync.log', 300);
 
@@ -174,7 +177,8 @@ class ControllerExtensionModulePromSync extends Controller {
         $this->response->setOutput($this->load->view('extension/module/prom_sync', $data));
     }
 
-    private function getLogTail($filename, $lines = 200) {
+    private function getLogTail($filename, $lines = 200)
+    {
         if (!is_file($filename) || !is_readable($filename)) {
             return '';
         }
@@ -209,7 +213,8 @@ class ControllerExtensionModulePromSync extends Controller {
         return implode("\n", $parts);
     }
 
-    public function import() {
+    public function import()
+    {
         $this->load->language('extension/module/prom_sync');
         $this->load->model('extension/module/prom_sync');
 
@@ -219,15 +224,20 @@ class ControllerExtensionModulePromSync extends Controller {
         }
 
         $summary = $this->model_extension_module_prom_sync->importProducts();
-        $message = sprintf('Import finished. Imported: %d, Updated: %d, Skipped: %d, Errors: %d',
-            $summary['imported'], $summary['updated'], $summary['skipped'], $summary['errors']
+        $message = sprintf(
+            'Import finished. Imported: %d, Updated: %d, Skipped: %d, Errors: %d',
+            $summary['imported'],
+            $summary['updated'],
+            $summary['skipped'],
+            $summary['errors']
         );
 
         $this->session->data['success'] = $message;
         $this->response->redirect($this->url->link('extension/module/prom_sync', $this->buildToken(), true));
     }
 
-    public function importBatch() {
+    public function importBatch()
+    {
         $this->load->language('extension/module/prom_sync');
 
         $json = array();
@@ -241,7 +251,7 @@ class ControllerExtensionModulePromSync extends Controller {
 
             $options = array();
             if (isset($this->request->post['last_id']) && $this->request->post['last_id'] !== '') {
-                $options['last_id'] = (int)$this->request->post['last_id'];
+                $options['last_id'] = (int) $this->request->post['last_id'];
             }
 
             $result = $this->model_extension_module_prom_sync->importProductsBatch($options);
@@ -257,7 +267,8 @@ class ControllerExtensionModulePromSync extends Controller {
         $this->response->setOutput(json_encode($json));
     }
 
-    public function install() {
+    public function install()
+    {
         $this->load->model('user/user_group');
         $this->model_user_user_group->addPermission($this->user->getGroupId(), 'access', 'extension/module/prom_sync');
         $this->model_user_user_group->addPermission($this->user->getGroupId(), 'modify', 'extension/module/prom_sync');
@@ -266,12 +277,14 @@ class ControllerExtensionModulePromSync extends Controller {
         $this->model_extension_module_prom_sync->install();
     }
 
-    public function uninstall() {
+    public function uninstall()
+    {
         $this->load->model('extension/module/prom_sync');
         $this->model_extension_module_prom_sync->uninstall();
     }
 
-    protected function validate() {
+    protected function validate()
+    {
         if (!$this->user->hasPermission('modify', 'extension/module/prom_sync')) {
             $this->error['warning'] = $this->language->get('error_permission');
         }
@@ -283,7 +296,8 @@ class ControllerExtensionModulePromSync extends Controller {
         return !$this->error;
     }
 
-    private function getConfigValue($key, $default = '') {
+    private function getConfigValue($key, $default = '')
+    {
         if (isset($this->request->post[$key])) {
             return $this->request->post[$key];
         }
@@ -294,7 +308,8 @@ class ControllerExtensionModulePromSync extends Controller {
         return $value;
     }
 
-    private function ensureMenuEvent() {
+    private function ensureMenuEvent()
+    {
         $this->load->model('setting/event');
         if (!$this->eventExists('prom_sync_menu')) {
             $this->model_setting_event->addEvent('prom_sync_menu', 'view/common/column_left/before', 'extension/prom_sync/menu', 1, 2);
@@ -305,23 +320,26 @@ class ControllerExtensionModulePromSync extends Controller {
         }
     }
 
-    private function eventExists($code) {
+    private function eventExists($code)
+    {
         if (method_exists($this->model_setting_event, 'getEventByCode')) {
-            return (bool)$this->model_setting_event->getEventByCode($code);
+            return (bool) $this->model_setting_event->getEventByCode($code);
         }
 
         $query = $this->db->query("SELECT event_id FROM `" . DB_PREFIX . "event` WHERE code = '" . $this->db->escape($code) . "' LIMIT 1");
         return !empty($query->row);
     }
 
-    private function buildToken() {
+    private function buildToken()
+    {
         if (!empty($this->session->data['user_token'])) {
             return 'user_token=' . $this->session->data['user_token'];
         }
         return 'token=' . $this->session->data['token'];
     }
 
-    private function generateCronKey() {
+    private function generateCronKey()
+    {
         if (function_exists('random_bytes')) {
             return bin2hex(random_bytes(16));
         }

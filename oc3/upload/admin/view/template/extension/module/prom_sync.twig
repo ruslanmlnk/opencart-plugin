@@ -243,6 +243,17 @@
                         </label>
                       </div>
                     </div>
+
+                    <div class="form-group">
+                      <label class="col-sm-8 control-label" data-toggle="tooltip" title="{{ help_single_category }}">{{ entry_single_category }}</label>
+                      <div class="col-sm-4">
+                        <input type="hidden" name="module_prom_sync_single_category" value="0" />
+                        <label class="ps-switch">
+                          <input type="checkbox" name="module_prom_sync_single_category" value="1" {% if module_prom_sync_single_category %}checked="checked"{% endif %} />
+                          <span class="ps-slider"></span>
+                        </label>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
