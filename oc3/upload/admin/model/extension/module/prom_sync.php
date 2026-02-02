@@ -868,7 +868,9 @@ class ModelExtensionModulePromSync extends Model
         $product_attributes = array();
 
         $raw_attrs = array();
-        if (!empty($prom_product['attributes']) && is_array($prom_product['attributes'])) {
+        if (!empty($prom_product['characteristics']) && is_array($prom_product['characteristics'])) {
+            $raw_attrs = $prom_product['characteristics'];
+        } elseif (!empty($prom_product['attributes']) && is_array($prom_product['attributes'])) {
             $raw_attrs = $prom_product['attributes'];
         } elseif (!empty($prom_product['properties']) && is_array($prom_product['properties'])) {
             $raw_attrs = $prom_product['properties'];
