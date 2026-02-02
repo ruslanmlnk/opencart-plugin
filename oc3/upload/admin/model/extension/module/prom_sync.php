@@ -640,17 +640,29 @@ class ModelExtensionModulePromSync extends Model
     {
         $seo = array();
         $store_id = 0;
+        $used_keywords = array();
 
         foreach ($languages as $language) {
+            $lang_id = (int) $language['language_id'];
             $texts = $this->getLocalizedTexts($prom_product, $language['code']);
             $keyword = $this->slugify($texts['name']);
+
             if ($keyword === '') {
                 $keyword = 'prom-' . (int) $prom_product['id'];
             }
+
+            // If this keyword was already generated for another language in this product, add prefix
+            if (in_array($keyword, $used_keywords)) {
+                $prefix = strtolower(substr($language['code'], 0, 2));
+                $keyword = $prefix . '-' . $keyword;
+            }
+
+            $used_keywords[] = $keyword;
+
             if (!isset($seo[$store_id])) {
                 $seo[$store_id] = array();
             }
-            $seo[$store_id][$language['language_id']] = $keyword;
+            $seo[$store_id][$lang_id] = $keyword;
         }
 
         return $seo;
@@ -685,6 +697,7 @@ class ModelExtensionModulePromSync extends Model
 
         $value = html_entity_decode($value, ENT_QUOTES, 'UTF-8');
         $value = strip_tags($value);
+        $value = $this->transliterate($value);
 
         if (function_exists('utf8_strtolower')) {
             $value = utf8_strtolower($value);
@@ -692,11 +705,92 @@ class ModelExtensionModulePromSync extends Model
             $value = strtolower($value);
         }
 
-        $value = preg_replace('/[^\\p{L}\\p{N}]+/u', '-', $value);
+        $value = preg_replace('/[^a-z0-9]+/i', '-', $value);
         $value = trim($value, '-');
         $value = preg_replace('/-+/', '-', $value);
 
         return $value;
+    }
+
+    private function transliterate($string)
+    {
+        $roman = array(
+            'А' => 'A',
+            'Б' => 'B',
+            'В' => 'V',
+            'Г' => 'G',
+            'Ґ' => 'G',
+            'Д' => 'D',
+            'Е' => 'E',
+            'Є' => 'Ye',
+            'Ё' => 'Yo',
+            'Ж' => 'Zh',
+            'З' => 'Z',
+            'И' => 'I',
+            'І' => 'I',
+            'Ї' => 'Yi',
+            'Й' => 'Y',
+            'К' => 'K',
+            'Л' => 'L',
+            'М' => 'M',
+            'Н' => 'N',
+            'О' => 'O',
+            'П' => 'P',
+            'Р' => 'R',
+            'С' => 'S',
+            'Т' => 'T',
+            'У' => 'U',
+            'Ф' => 'F',
+            'Х' => 'Kh',
+            'Ц' => 'Ts',
+            'Ч' => 'Ch',
+            'Ш' => 'Sh',
+            'Щ' => 'Shch',
+            'Ъ' => '',
+            'Ы' => 'Y',
+            'Ь' => '',
+            'Э' => 'E',
+            'Ю' => 'Yu',
+            'Я' => 'Ya',
+            'а' => 'a',
+            'б' => 'b',
+            'в' => 'v',
+            'г' => 'g',
+            'ґ' => 'g',
+            'д' => 'd',
+            'е' => 'e',
+            'є' => 'ye',
+            'ё' => 'yo',
+            'ж' => 'zh',
+            'з' => 'z',
+            'и' => 'i',
+            'і' => 'i',
+            'ї' => 'yi',
+            'й' => 'y',
+            'к' => 'k',
+            'л' => 'l',
+            'м' => 'm',
+            'н' => 'n',
+            'о' => 'o',
+            'п' => 'p',
+            'р' => 'r',
+            'с' => 's',
+            'т' => 't',
+            'у' => 'u',
+            'ф' => 'f',
+            'х' => 'kh',
+            'ц' => 'ts',
+            'ч' => 'ch',
+            'ш' => 'sh',
+            'щ' => 'shch',
+            'ъ' => '',
+            'ы' => 'y',
+            'ь' => '',
+            'э' => 'e',
+            'ю' => 'yu',
+            'я' => 'ya'
+        );
+        return strtr($string, $roman);
     }
 
     private function collectImageUrls(array $prom_product)
@@ -1192,6 +1286,7 @@ class ModelExtensionModulePromSync extends Model
             $sizes = array(
                 array(40, 40),
                 array(100, 100),
+                array(200, 200),
                 array(228, 228),
                 array(500, 500),
                 array(74, 74)
@@ -1334,11 +1429,7 @@ class ModelExtensionModulePromSync extends Model
     {
         $category_ids = array();
 
-        if (!empty($settings['single_category'])) {
-            // If Single Category mode is ON, ignore Prom groups mapping logic
-            // We will just return the default category ID below
-            // Use default category as the main category
-        } elseif (!empty($settings['map_groups'])) {
+        if (!empty($settings['map_groups'])) {
             $group = null;
             if (!empty($prom_product['group'])) {
                 if (is_array($prom_product['group'])) {
@@ -1371,6 +1462,7 @@ class ModelExtensionModulePromSync extends Model
     {
         $prom_group_id = (int) $group['id'];
         $query = $this->db->query("SELECT oc_category_id FROM `" . DB_PREFIX . "prom_sync_group` WHERE prom_group_id = '" . (int) $prom_group_id . "' LIMIT 1");
+
         if (!empty($query->row)) {
             return (int) $query->row['oc_category_id'];
         }
@@ -1380,6 +1472,10 @@ class ModelExtensionModulePromSync extends Model
         }
 
         $parent_id = 0;
+        if (!empty($settings['single_category'])) {
+            $parent_id = $this->getOrCreateRootGoodsCategory($languages);
+        }
+
         if (!empty($group['parent_group_id'])) {
             $parent_query = $this->db->query("SELECT oc_category_id FROM `" . DB_PREFIX . "prom_sync_group` WHERE prom_group_id = '" . (int) $group['parent_group_id'] . "' LIMIT 1");
             if (!empty($parent_query->row)) {
@@ -1417,6 +1513,44 @@ class ModelExtensionModulePromSync extends Model
         $this->db->query("INSERT INTO `" . DB_PREFIX . "prom_sync_group` SET prom_group_id = '" . (int) $prom_group_id . "', oc_category_id = '" . (int) $oc_category_id . "'");
 
         return $oc_category_id;
+    }
+
+    private function getOrCreateRootGoodsCategory(array $languages)
+    {
+        $name = 'ТОВАРИ';
+
+        // Search by name
+        $query = $this->db->query("SELECT category_id FROM `" . DB_PREFIX . "category_description` WHERE name = '" . $this->db->escape($name) . "' LIMIT 1");
+        if (!empty($query->row)) {
+            return (int) $query->row['category_id'];
+        }
+
+        $this->load->model('catalog/category');
+
+        $category_description = array();
+        foreach ($languages as $language) {
+            $category_description[$language['language_id']] = array(
+                'name' => $name,
+                'description' => '',
+                'meta_title' => $name,
+                'meta_description' => '',
+                'meta_keyword' => ''
+            );
+        }
+
+        $category_data = array(
+            'parent_id' => 0,
+            'top' => 1,
+            'column' => 1,
+            'sort_order' => 0,
+            'status' => 1,
+            'category_description' => $category_description,
+            'category_store' => array(0),
+            'category_layout' => array(),
+            'keyword' => ''
+        );
+
+        return $this->model_catalog_category->addCategory($category_data);
     }
 
     private function getProductMappingByPromId($prom_id)

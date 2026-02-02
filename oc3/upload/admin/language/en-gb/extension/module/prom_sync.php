@@ -56,14 +56,14 @@ $_['entry_cron_url'] = 'Cron URL';
 $_['entry_limit'] = 'API page size (limit)';
 $_['entry_country_ru'] = 'Manufacturer country (RU)';
 $_['entry_country_uk'] = 'Manufacturer country (UA)';
-$_['entry_single_category'] = 'Put all products in one category';
+$_['entry_single_category'] = 'Nested under root ТОВАРИ category';
 
 // Help
 $_['help_domain'] = 'Default: prom.ua (use satu.kz, deal.by, vendigo.ro if needed).';
 $_['help_token'] = 'Prom Public API bearer token.';
 $_['help_language'] = 'X-LANGUAGE header for API responses (uk, ru, en).';
 $_['help_default_category'] = 'If no group mapping, new products will use this category ID.';
-$_['help_single_category'] = 'If enabled, ALL imported products will be assigned as subcategories of the Default Category (defined above). Original Prom structure will be ignored.';
+$_['help_single_category'] = 'If enabled, all imported Prom groups will be created as subcategories of a single root category named \'ТОВАРИ\' (created automatically).';
 $_['help_cron_key'] = 'Secret key for the cron URL.';
 $_['help_limit'] = 'Max number of items per API request.';
 $_['help_country'] = 'Used when Prom does not provide country of origin.';
