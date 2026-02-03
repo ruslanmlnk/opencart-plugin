@@ -31,24 +31,42 @@ class ModelExtensionModulePromSync extends Model
         $this->load->model('checkout/order');
         $order_products = $this->model_checkout_order->getOrderProducts($order_id);
         if (!$order_products) {
+            $this->logMessage('PromSync: push stock skipped, no products in order ' . $order_id);
             return;
         }
 
         $items = array();
         foreach ($order_products as $order_product) {
             $product_id = (int) $order_product['product_id'];
+            $prom_product_id = 0;
+
+            // 1. Try mapping table
             $mapping = $this->getProductMappingByOcId($product_id);
-            if (!$mapping) {
+            if ($mapping) {
+                $prom_product_id = (int) $mapping['prom_product_id'];
+            }
+
+            // 2. Try extract from model (PROM-ID)
+            if (!$prom_product_id) {
+                $query = $this->db->query("SELECT model FROM `" . DB_PREFIX . "product` WHERE product_id = '" . $product_id . "' LIMIT 1");
+                if (!empty($query->row['model']) && preg_match('/^PROM-(\d+)$/', $query->row['model'], $matches)) {
+                    $prom_product_id = (int) $matches[1];
+                }
+            }
+
+            if (!$prom_product_id) {
+                $this->logMessage('PromSync: product ' . $product_id . ' in order ' . $order_id . ' not linked to Prom (no mapping or PROM-ID in model)');
                 continue;
             }
 
             $quantity = $this->getProductQuantity($product_id);
             $items[] = array(
-                'id' => (int) $mapping['prom_product_id'],
+                'id' => $prom_product_id,
                 'quantity_in_stock' => (int) $quantity,
                 'in_stock' => $quantity > 0,
                 'presence' => $quantity > 0 ? 'available' : 'not_available'
             );
+            $this->logMessage(sprintf('PromSync: order %d, adding product %d (Prom ID: %d) to stock push, new qty: %d', $order_id, $product_id, $prom_product_id, $quantity));
         }
 
         if (empty($items)) {
@@ -58,10 +76,11 @@ class ModelExtensionModulePromSync extends Model
         $api = $this->getApi();
         $response = $api->post('/products/edit', $items);
         if (!$response['success']) {
-            $this->log->write('PromSync: failed to push stock. ' . $response['error']);
+            $this->logMessage('PromSync: failed to push stock for OC order ' . $order_id . '. Error: ' . (isset($response['error']) ? $response['error'] : 'Unknown error'));
             return;
         }
 
+        $this->logMessage('PromSync: successfully pushed stock for order ' . $order_id);
         $this->markOcOrderSynced($order_id);
     }
 
@@ -177,17 +196,20 @@ class ModelExtensionModulePromSync extends Model
         }
 
         if ($this->isPromOrderProcessed($order_id)) {
+            // No need to log every time for already processed orders unless you want to see them
             return 'skipped';
         }
 
         $status = isset($order['status']) ? strtolower($order['status']) : '';
         if ($status === 'canceled' || $status === 'cancelled') {
             $this->markPromOrderProcessed($order_id);
+            $this->logMessage(sprintf('PromSync: order %d skipped (status: %s)', $order_id, $status));
             return 'skipped';
         }
 
         if (empty($order['products']) || !is_array($order['products'])) {
             $this->markPromOrderProcessed($order_id);
+            $this->logMessage(sprintf('PromSync: order %d skipped (no products)', $order_id));
             return 'skipped';
         }
 
@@ -195,6 +217,8 @@ class ModelExtensionModulePromSync extends Model
         foreach ($order['products'] as $product) {
             $oc_product_id = $this->resolveOcProductId($product);
             if (!$oc_product_id) {
+                $sku = isset($product['sku']) ? $product['sku'] : (isset($product['name']) ? $product['name'] : 'ID: ' . $product['id']);
+                $this->logMessage(sprintf('PromSync: order %d, product "%s" skipped (not found in OpenCart)', $order_id, $sku));
                 continue;
             }
             $qty = isset($product['quantity']) ? (float) $product['quantity'] : 0;
@@ -203,6 +227,10 @@ class ModelExtensionModulePromSync extends Model
             }
             $this->applyStockDelta($oc_product_id, $qty);
             $any_updated = true;
+        }
+
+        if (!$any_updated) {
+            $this->logMessage(sprintf('PromSync: order %d skipped (no products were updated/mapped)', $order_id));
         }
 
         $this->markPromOrderProcessed($order_id);
@@ -246,8 +274,10 @@ class ModelExtensionModulePromSync extends Model
 
     private function resolveOcProductId(array $prom_product)
     {
-        if (!empty($prom_product['id'])) {
-            $mapping = $this->getProductMappingByPromId((int) $prom_product['id']);
+        $prom_id = !empty($prom_product['id']) ? (int) $prom_product['id'] : 0;
+
+        if ($prom_id) {
+            $mapping = $this->getProductMappingByPromId($prom_id);
             if ($mapping) {
                 return (int) $mapping['oc_product_id'];
             }
@@ -260,13 +290,24 @@ class ModelExtensionModulePromSync extends Model
             }
         }
 
+        // Try matching by Model (PROM-ID) - this is how our importer sets it
+        if ($prom_id) {
+            $model = 'PROM-' . $prom_id;
+            $query = $this->db->query("SELECT product_id FROM `" . DB_PREFIX . "product` WHERE model = '" . $this->db->escape($model) . "' LIMIT 1");
+            if (!empty($query->row)) {
+                $product_id = (int) $query->row['product_id'];
+                $this->setProductMapping($prom_id, isset($prom_product['external_id']) ? $prom_product['external_id'] : '', $product_id, isset($prom_product['sku']) ? $prom_product['sku'] : '');
+                return $product_id;
+            }
+        }
+
         if (!empty($this->config->get('module_prom_sync_match_by_sku')) && !empty($prom_product['sku'])) {
             $sku = $this->db->escape($prom_product['sku']);
             $query = $this->db->query("SELECT product_id FROM `" . DB_PREFIX . "product` WHERE sku = '" . $sku . "' LIMIT 1");
             if (!empty($query->row)) {
                 $product_id = (int) $query->row['product_id'];
-                if (!empty($prom_product['id'])) {
-                    $this->setProductMapping((int) $prom_product['id'], $prom_product['external_id'], $product_id, $prom_product['sku']);
+                if ($prom_id) {
+                    $this->setProductMapping($prom_id, isset($prom_product['external_id']) ? $prom_product['external_id'] : '', $product_id, $prom_product['sku']);
                 }
                 return $product_id;
             }
