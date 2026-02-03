@@ -161,7 +161,7 @@ class ModelExtensionModulePromSync extends Model
     private function updateLastOrderSync($value = null)
     {
         if ($value === null) {
-            $value = date('c');
+            $value = gmdate('Y-m-d\TH:i:s') . 'Z';
         }
         $this->db->query("DELETE FROM `" . DB_PREFIX . "setting` WHERE store_id = '0' AND `code` = 'module_prom_sync' AND `key` = 'module_prom_sync_last_order_sync'");
         $this->db->query("INSERT INTO `" . DB_PREFIX . "setting` SET store_id = '0', `code` = 'module_prom_sync', `key` = 'module_prom_sync_last_order_sync', `value` = '" . $this->db->escape($value) . "', `serialized` = '0'");

@@ -91,18 +91,9 @@ class ModelExtensionModulePromSync extends Model
             $limit = 50;
         }
 
-        $last_modified_from = $this->config->get('module_prom_sync_last_order_sync');
-
-        if (!$last_modified_from) {
-            $this->logMessage('PromSync cron: initial run, setting starting timestamp and skipping old orders.');
-            $this->updateLastOrderSync();
-            return array(
-                'orders' => 0,
-                'updated' => 0,
-                'skipped' => 0,
-                'errors' => 0
-            );
-        }
+        // Window of 2 days (yesterday and today) for reliability, as per user script
+        $date_from = date('Y-m-d', strtotime('-1 day'));
+        $date_to = date('Y-m-d', strtotime('+1 day'));
 
         $orders_processed = 0;
         $updated = 0;
@@ -112,12 +103,14 @@ class ModelExtensionModulePromSync extends Model
         $last_id = null;
 
         do {
-            $query = array('limit' => $limit);
+            $query = array(
+                'limit' => $limit,
+                'date_from' => $date_from,
+                'date_to' => $date_to
+            );
+
             if ($last_id !== null) {
                 $query['last_id'] = $last_id;
-            }
-            if ($last_modified_from) {
-                $query['last_modified_from'] = $last_modified_from;
             }
 
             $response = $api->get('/orders/list', $query);
@@ -144,39 +137,15 @@ class ModelExtensionModulePromSync extends Model
                     $min_id = $order_id;
                 }
 
-                if ($this->isPromOrderProcessed($order_id)) {
-                    $skipped++;
-                    continue;
-                }
-
-                $status = isset($order['status']) ? strtolower($order['status']) : '';
-                if ($status === 'canceled' || $status === 'cancelled') {
-                    $this->markPromOrderProcessed($order_id);
-                    $skipped++;
-                    continue;
-                }
-
-                if (empty($order['products']) || !is_array($order['products'])) {
-                    $this->markPromOrderProcessed($order_id);
-                    $skipped++;
-                    continue;
-                }
-
-                foreach ($order['products'] as $product) {
-                    $oc_product_id = $this->resolveOcProductId($product);
-                    if (!$oc_product_id) {
-                        continue;
-                    }
-                    $qty = isset($product['quantity']) ? (float) $product['quantity'] : 0;
-                    if ($qty <= 0) {
-                        continue;
-                    }
-                    $this->applyStockDelta($oc_product_id, $qty);
+                $process_result = $this->processPromOrder($order);
+                if ($process_result === 'updated') {
                     $updated++;
+                    $orders_processed++;
+                } elseif ($process_result === 'skipped') {
+                    $skipped++;
+                } else {
+                    $errors++;
                 }
-
-                $this->markPromOrderProcessed($order_id);
-                $orders_processed++;
             }
 
             if ($min_id === null) {
@@ -185,15 +154,12 @@ class ModelExtensionModulePromSync extends Model
 
             $last_id = $min_id - 1;
 
-            // Safety check: stop if we processed enough orders to avoid timeout
             if ($orders_processed >= 200) {
                 $this->logMessage('PromSync cron: reached batch safety limit (200 orders).');
                 break;
             }
 
         } while ($last_id > 0 && count($data['orders']) == $limit);
-
-        $this->updateLastOrderSync();
 
         return array(
             'orders' => $orders_processed,
@@ -203,12 +169,79 @@ class ModelExtensionModulePromSync extends Model
         );
     }
 
+    public function processPromOrder(array $order)
+    {
+        $order_id = (int) $order['id'];
+        if (!$order_id) {
+            return 'error';
+        }
+
+        if ($this->isPromOrderProcessed($order_id)) {
+            return 'skipped';
+        }
+
+        $status = isset($order['status']) ? strtolower($order['status']) : '';
+        if ($status === 'canceled' || $status === 'cancelled') {
+            $this->markPromOrderProcessed($order_id);
+            return 'skipped';
+        }
+
+        if (empty($order['products']) || !is_array($order['products'])) {
+            $this->markPromOrderProcessed($order_id);
+            return 'skipped';
+        }
+
+        $any_updated = false;
+        foreach ($order['products'] as $product) {
+            $oc_product_id = $this->resolveOcProductId($product);
+            if (!$oc_product_id) {
+                continue;
+            }
+            $qty = isset($product['quantity']) ? (float) $product['quantity'] : 0;
+            if ($qty <= 0) {
+                continue;
+            }
+            $this->applyStockDelta($oc_product_id, $qty);
+            $any_updated = true;
+        }
+
+        $this->markPromOrderProcessed($order_id);
+
+        return $any_updated ? 'updated' : 'skipped';
+    }
+
     private function applyStockDelta($product_id, $qty)
     {
         $current = $this->getProductQuantity($product_id);
-        $new_qty = max($current - (float) $qty, 0);
+
         $this->db->query("UPDATE `" . DB_PREFIX . "product` SET quantity = GREATEST(quantity - " . (float) $qty . ", 0), date_modified = NOW() WHERE product_id = '" . (int) $product_id . "'");
-        $this->logMessage(sprintf('PromSync cron: product_id=%d stock %s -> %s (delta -%s)', (int) $product_id, $current, $new_qty, (float) $qty));
+
+        $this->logMessage(sprintf('PromSync: product_id=%d stock %s -> delta -%s', (int) $product_id, $current, (float) $qty));
+
+        // Push updated stock back to Prom to ensure sync
+        $this->syncProductByOcId($product_id);
+    }
+
+    public function syncProductByOcId($oc_product_id)
+    {
+        $mapping = $this->getProductMappingByOcId((int) $oc_product_id);
+        if (!$mapping || empty($mapping['prom_product_id'])) {
+            return false;
+        }
+
+        $quantity = $this->getProductQuantity((int) $oc_product_id);
+        $items = array(
+            array(
+                'id' => (int) $mapping['prom_product_id'],
+                'quantity_in_stock' => (int) $quantity,
+                'in_stock' => $quantity > 0,
+                'presence' => $quantity > 0 ? 'available' : 'not_available'
+            )
+        );
+
+        $api = $this->getApi();
+        $response = $api->post('/products/edit', $items);
+        return $response['success'];
     }
 
     private function resolveOcProductId(array $prom_product)
@@ -228,7 +261,8 @@ class ModelExtensionModulePromSync extends Model
         }
 
         if (!empty($this->config->get('module_prom_sync_match_by_sku')) && !empty($prom_product['sku'])) {
-            $query = $this->db->query("SELECT product_id FROM `" . DB_PREFIX . "product` WHERE sku = '" . $this->db->escape($prom_product['sku']) . "' LIMIT 1");
+            $sku = $this->db->escape($prom_product['sku']);
+            $query = $this->db->query("SELECT product_id FROM `" . DB_PREFIX . "product` WHERE sku = '" . $sku . "' LIMIT 1");
             if (!empty($query->row)) {
                 $product_id = (int) $query->row['product_id'];
                 if (!empty($prom_product['id'])) {
@@ -289,7 +323,7 @@ class ModelExtensionModulePromSync extends Model
     public function updateLastOrderSync($value = null)
     {
         if ($value === null) {
-            $value = date('c');
+            $value = gmdate('Y-m-d\TH:i:s') . 'Z';
         }
         $this->db->query("DELETE FROM `" . DB_PREFIX . "setting` WHERE store_id = '0' AND `code` = 'module_prom_sync' AND `key` = 'module_prom_sync_last_order_sync'");
         $this->db->query("INSERT INTO `" . DB_PREFIX . "setting` SET store_id = '0', `code` = 'module_prom_sync', `key` = 'module_prom_sync_last_order_sync', `value` = '" . $this->db->escape($value) . "', `serialized` = '0'");
