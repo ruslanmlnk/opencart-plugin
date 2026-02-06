@@ -195,7 +195,9 @@ class ModelExtensionModulePromSync extends Model
             return 'error';
         }
 
-        if ($this->isPromOrderProcessed($order_id)) {
+        $force = !empty($this->request->get['force']);
+
+        if (!$force && $this->isPromOrderProcessed($order_id)) {
             // No need to log every time for already processed orders unless you want to see them
             return 'skipped';
         }
@@ -217,7 +219,7 @@ class ModelExtensionModulePromSync extends Model
         foreach ($order['products'] as $product) {
             $oc_product_id = $this->resolveOcProductId($product);
             if (!$oc_product_id) {
-                $sku = isset($product['sku']) ? $product['sku'] : (isset($product['name']) ? $product['name'] : 'ID: ' . $product['id']);
+                $sku = !empty($product['sku']) ? $product['sku'] : (!empty($product['name']) ? $product['name'] : 'ID: ' . $product['id']);
                 $this->logMessage(sprintf('PromSync: order %d, product "%s" skipped (not found in OpenCart)', $order_id, $sku));
                 continue;
             }
@@ -290,13 +292,40 @@ class ModelExtensionModulePromSync extends Model
             }
         }
 
-        // Try matching by Model (PROM-ID) - this is how our importer sets it
+        // Try matching by Model (PROM-ID) or raw Model
         if ($prom_id) {
-            $model = 'PROM-' . $prom_id;
-            $query = $this->db->query("SELECT product_id FROM `" . DB_PREFIX . "product` WHERE model = '" . $this->db->escape($model) . "' LIMIT 1");
+            $model_prom = 'PROM-' . $prom_id;
+            $query = $this->db->query("SELECT product_id FROM `" . DB_PREFIX . "product` WHERE model = '" . $this->db->escape($model_prom) . "' LIMIT 1");
             if (!empty($query->row)) {
                 $product_id = (int) $query->row['product_id'];
                 $this->setProductMapping($prom_id, isset($prom_product['external_id']) ? $prom_product['external_id'] : '', $product_id, isset($prom_product['sku']) ? $prom_product['sku'] : '');
+                return $product_id;
+            }
+        }
+
+        // Final fallback: try search by model directly (case when SKU was put into Model)
+        if (!empty($prom_product['sku'])) {
+            $model_raw = $this->db->escape($prom_product['sku']);
+            $query = $this->db->query("SELECT product_id FROM `" . DB_PREFIX . "product` WHERE model = '" . $model_raw . "' LIMIT 1");
+            if (!empty($query->row)) {
+                $product_id = (int) $query->row['product_id'];
+                if ($prom_id) {
+                    $this->setProductMapping($prom_id, isset($prom_product['external_id']) ? $prom_product['external_id'] : '', $product_id, $prom_product['sku']);
+                }
+                return $product_id;
+            }
+        }
+
+        // Extremely final fallback: try search by exact NAME
+        if (!empty($prom_product['name'])) {
+            $name = $this->db->escape($prom_product['name']);
+            $query = $this->db->query("SELECT product_id FROM `" . DB_PREFIX . "product_description` WHERE name = '" . $name . "' LIMIT 1");
+            if (!empty($query->row)) {
+                $product_id = (int) $query->row['product_id'];
+                $this->logMessage(sprintf('PromSync: linked product %d by name match "%s"', $product_id, $prom_product['name']));
+                if ($prom_id) {
+                    $this->setProductMapping($prom_id, isset($prom_product['external_id']) ? $prom_product['external_id'] : '', $product_id, isset($prom_product['sku']) ? $prom_product['sku'] : '');
+                }
                 return $product_id;
             }
         }

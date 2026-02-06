@@ -57,6 +57,7 @@ $_['entry_limit'] = 'API page size (limit)';
 $_['entry_country_ru'] = 'Manufacturer country (RU)';
 $_['entry_country_uk'] = 'Manufacturer country (UA)';
 $_['entry_single_category'] = 'Nested under root ТОВАРИ category';
+$_['entry_keep_zero_qty_enabled'] = 'Keep enabled if quantity is 0';
 
 // Help
 $_['help_domain'] = 'Default: prom.ua (use satu.kz, deal.by, vendigo.ro if needed).';

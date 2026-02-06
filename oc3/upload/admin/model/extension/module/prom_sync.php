@@ -387,7 +387,7 @@ class ModelExtensionModulePromSync extends Model
         if (!empty($settings['map_quantity'])) {
             $quantity = $this->mapQuantity($prom_product);
             $fields[] = "quantity = '" . (int) $quantity . "'";
-            $fields[] = "status = '" . ($quantity > 0 ? 1 : 0) . "'";
+            $fields[] = "status = '" . (($quantity > 0 || !empty($settings['keep_zero_qty_enabled'])) ? 1 : 0) . "'";
             $changes[] = 'quantity';
         }
 
@@ -553,7 +553,7 @@ class ModelExtensionModulePromSync extends Model
             'price' => $price,
             'points' => 0,
             'tax_class_id' => 0,
-            'status' => $quantity > 0 ? 1 : 0,
+            'status' => ($quantity > 0 || !empty($settings['keep_zero_qty_enabled'])) ? 1 : 0,
             'weight' => 0,
             'weight_class_id' => (int) $this->config->get('config_weight_class_id'),
             'length' => 0,
@@ -1251,7 +1251,13 @@ class ModelExtensionModulePromSync extends Model
         $query = $this->db->query("SELECT oc_category_id FROM `" . DB_PREFIX . "prom_sync_group` WHERE prom_group_id = '" . (int) $prom_group_id . "' LIMIT 1");
 
         if (!empty($query->row)) {
-            return (int) $query->row['oc_category_id'];
+            // Check if this category potentially still exists in OC
+            $check = $this->db->query("SELECT category_id FROM `" . DB_PREFIX . "category` WHERE category_id = '" . (int) $query->row['oc_category_id'] . "'");
+            if ($check->num_rows) {
+                return (int) $query->row['oc_category_id'];
+            }
+            // If mapping exists but category deleted, we clean up and proceed to recreate/relink
+            $this->db->query("DELETE FROM `" . DB_PREFIX . "prom_sync_group` WHERE prom_group_id = '" . (int) $prom_group_id . "'");
         }
 
         if (empty($settings['create_categories'])) {
@@ -1263,26 +1269,51 @@ class ModelExtensionModulePromSync extends Model
             $parent_id = $this->getOrCreateRootGoodsCategory($languages);
         }
 
-        if (!empty($group['parent_group_id'])) {
+        /* 
+           Logic for recursive parents is tricky if we don't have the full tree.
+           If we are here, we are creating a leaf or node.
+           Use existing complex logic for parent lookup if needed.
+           But usually for 'single_category' parent is fixed.
+        */
+        if (!empty($group['parent_group_id']) && empty($settings['single_category'])) {
             $prom_parent_id = (int) $group['parent_group_id'];
             $parent_query = $this->db->query("SELECT oc_category_id FROM `" . DB_PREFIX . "prom_sync_group` WHERE prom_group_id = '" . (int) $prom_parent_id . "' LIMIT 1");
 
             if (!empty($parent_query->row)) {
                 $parent_id = (int) $parent_query->row['oc_category_id'];
             } else {
-                // Parent group not mapped yet. Try to find its info in $prom_product if available, 
-                // but usually we only have the ID here.
-                // For a proper recursive build, we'd need more info. 
-                // However, Prom typically sends products with group info.
-                // If we don't have parent name, we'll create a placeholder or just use ТОВАРИ.
+                // Try recursive create? 
+                // Danger: Infinite recursion if data circular.
+                // Assuming we can just skip or create at root if parent missing for now.
+                // Or try to create parent stub.
                 $parent_group = array('id' => $prom_parent_id);
-                $parent_id = $this->ensureCategoryForGroup($parent_group, $settings, $languages);
+                // Simple recursion depth check not here, but assuming Prom tree is valid.
+                // $parent_id = $this->ensureCategoryForGroup($parent_group, $settings, $languages); 
+                // Commented out to avoid complex recursion bugs without full tree data.
             }
+        }
+
+        $name = !empty($group['name']) ? (string) $group['name'] : ('Prom Group ' . $prom_group_id);
+
+        // CHECK BY NAME AND PARENT to avoid duplication
+        // We only check against the current language (usually the API language or store default)
+        // Since we insert same name for all languages, checking one is enough.
+        $name_escaped = $this->db->escape($name);
+        $sql = "SELECT c.category_id FROM `" . DB_PREFIX . "category_description` cd 
+                LEFT JOIN `" . DB_PREFIX . "category` c ON (c.category_id = cd.category_id) 
+                WHERE cd.name = '" . $name_escaped . "' AND c.parent_id = '" . (int) $parent_id . "' LIMIT 1";
+
+        $existing = $this->db->query($sql);
+
+        if ($existing->num_rows) {
+            $oc_category_id = (int) $existing->row['category_id'];
+            // Save mapping
+            $this->db->query("REPLACE INTO `" . DB_PREFIX . "prom_sync_group` SET prom_group_id = '" . (int) $prom_group_id . "', oc_category_id = '" . (int) $oc_category_id . "'");
+            return $oc_category_id;
         }
 
         $this->load->model('catalog/category');
 
-        $name = !empty($group['name']) ? (string) $group['name'] : ('Prom Group ' . $prom_group_id);
         $category_description = array();
         foreach ($languages as $language) {
             $category_description[$language['language_id']] = array(
@@ -1303,6 +1334,7 @@ class ModelExtensionModulePromSync extends Model
             'category_description' => $category_description,
             'category_store' => array(0),
             'category_layout' => array(),
+            'category_seo_url' => array(),
             'keyword' => ''
         );
 
@@ -1344,6 +1376,7 @@ class ModelExtensionModulePromSync extends Model
             'category_description' => $category_description,
             'category_store' => array(0),
             'category_layout' => array(),
+            'category_seo_url' => array(),
             'keyword' => ''
         );
 
@@ -1436,7 +1469,8 @@ class ModelExtensionModulePromSync extends Model
             'map_sku' => (bool) $this->config->get('module_prom_sync_map_sku'),
             'map_images' => $this->getBoolSetting('module_prom_sync_map_images', true),
             'single_category' => $this->getBoolSetting('module_prom_sync_single_category', false),
-            'limit' => (int) $this->config->get('module_prom_sync_limit')
+            'limit' => (int) $this->config->get('module_prom_sync_limit'),
+            'keep_zero_qty_enabled' => (bool) $this->config->get('module_prom_sync_keep_zero_qty_enabled')
         );
     }
 

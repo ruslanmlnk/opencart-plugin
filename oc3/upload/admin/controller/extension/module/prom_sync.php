@@ -144,6 +144,7 @@ class ControllerExtensionModulePromSync extends Controller
         $data['module_prom_sync_push_stock'] = $this->getConfigValue('module_prom_sync_push_stock', 1);
         $data['module_prom_sync_pull_orders'] = $this->getConfigValue('module_prom_sync_pull_orders', 1);
         $data['module_prom_sync_match_by_sku'] = $this->getConfigValue('module_prom_sync_match_by_sku', 1);
+        $data['module_prom_sync_keep_zero_qty_enabled'] = $this->getConfigValue('module_prom_sync_keep_zero_qty_enabled', 0);
         $data['module_prom_sync_limit'] = $this->getConfigValue('module_prom_sync_limit', 50);
         $data['module_prom_sync_country_ru'] = $this->getConfigValue('module_prom_sync_country_ru', 'Украина');
         $data['module_prom_sync_country_uk'] = $this->getConfigValue('module_prom_sync_country_uk', 'Україна');
