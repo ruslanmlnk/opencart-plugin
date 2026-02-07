@@ -998,6 +998,18 @@ class ModelExtensionModulePromSync extends Model
             return '';
         }
 
+        // Apply quality transformation for Prom.ua images
+        $quality = $this->config->get('module_prom_sync_image_quality') ?: 'original';
+        if ($quality && strpos($url, 'images.prom.ua') !== false) {
+            if ($quality === 'original') {
+                $url = preg_replace('/_w\d+_h\d+_/', '_', $url);
+            } elseif (in_array($quality, array('640', '1280'))) {
+                $url = preg_replace('/_w\d+_h\d+_/', '_w' . (int) $quality . '_h' . (int) $quality . '_', $url);
+            }
+        }
+
+        $this->logMessage('PromSync: downloading image from ' . $url);
+
         $data = $this->fetchUrl($url, $status, $error);
         if ($data === false || $data === '') {
             $this->logMessage(sprintf('PromSync: image download failed for %s (error=%s, status=%d)', $url, $error, (int) $status));

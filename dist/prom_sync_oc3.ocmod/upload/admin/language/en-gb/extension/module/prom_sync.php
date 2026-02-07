@@ -52,6 +52,7 @@ $_['entry_map_price'] = 'Map price';
 $_['entry_map_quantity'] = 'Map quantity';
 $_['entry_map_sku'] = 'Map SKU';
 $_['entry_map_images'] = 'Map images';
+$_['entry_image_quality'] = 'Image Quality';
 $_['entry_push_stock'] = 'Push stock to Prom on OpenCart order';
 $_['entry_pull_orders'] = 'Pull orders from Prom to update stock';
 $_['entry_match_by_sku'] = 'Match products by SKU if no mapping';
@@ -76,6 +77,7 @@ $_['help_single_category'] = 'If enabled, all imported Prom groups will be creat
 $_['help_cron_key'] = 'Secret key for the cron URL.';
 $_['help_limit'] = 'Max number of items per API request.';
 $_['help_country'] = 'Used when Prom does not provide country of origin.';
+$_['help_image_quality'] = 'Choose the quality of images to download. "Original" will download full-size images without resizing (best quality).';
 
 // Button
 $_['button_import'] = 'Import products now';

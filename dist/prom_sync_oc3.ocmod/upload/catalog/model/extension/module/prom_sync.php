@@ -169,6 +169,31 @@ class ModelExtensionModulePromSync extends Model
                         $this->db->query("UPDATE `" . DB_PREFIX . "product` SET sku = '" . $this->db->escape($prom_product['sku']) . "' WHERE product_id = '" . (int) $oc_product_id . "'");
                     }
 
+                    if ($this->config->get('module_prom_sync_map_images')) {
+                        $image_urls = $this->collectImageUrls($prom_product);
+                        $main_image_set = false;
+                        $downloaded_count = 0;
+
+                        foreach ($image_urls as $url) {
+                            $local = $this->downloadImage($url);
+                            if ($local) {
+                                if (!$main_image_set) {
+                                    $this->db->query("UPDATE `" . DB_PREFIX . "product` SET image = '" . $this->db->escape($local) . "' WHERE product_id = '" . (int) $oc_product_id . "'");
+                                    $this->db->query("DELETE FROM `" . DB_PREFIX . "product_image` WHERE product_id = '" . (int) $oc_product_id . "'");
+                                    $main_image_set = true;
+                                } else {
+                                    $sort = $downloaded_count - 1;
+                                    $this->db->query("INSERT INTO `" . DB_PREFIX . "product_image` SET product_id = '" . (int) $oc_product_id . "', image = '" . $this->db->escape($local) . "', sort_order = '" . (int) $sort . "'");
+                                }
+                                $downloaded_count++;
+                            }
+                        }
+
+                        if ($downloaded_count > 0) {
+                            $this->logMessage(sprintf('PromSync: processed %d images for product oc_id=%d', $downloaded_count, $oc_product_id));
+                        }
+                    }
+
                     if ($this->config->get('module_prom_sync_map_name') || $this->config->get('module_prom_sync_map_description')) {
                         $langs = $this->getCatalogLanguages();
                         foreach ($langs as $lang) {
@@ -617,6 +642,172 @@ class ModelExtensionModulePromSync extends Model
         }
 
         return array('name' => $base_name, 'description' => $base_description);
+    }
+
+    private function collectImageUrls(array $prom_product)
+    {
+        $urls = array();
+
+        $urls = array_merge($urls, $this->extractImageUrls(isset($prom_product['main_image']) ? $prom_product['main_image'] : null));
+        $urls = array_merge($urls, $this->extractImageUrls(isset($prom_product['image']) ? $prom_product['image'] : null));
+        $urls = array_merge($urls, $this->extractImageUrls(isset($prom_product['picture']) ? $prom_product['picture'] : null));
+        $urls = array_merge($urls, $this->extractImageUrls(isset($prom_product['pictures']) ? $prom_product['pictures'] : null));
+
+        if (!empty($prom_product['images']) && is_array($prom_product['images'])) {
+            foreach ($prom_product['images'] as $image) {
+                $urls = array_merge($urls, $this->extractImageUrls($image));
+            }
+        }
+
+        $filtered = array();
+        foreach ($urls as $url) {
+            $url = trim((string) $url);
+            if ($url !== '' && preg_match('/^https?:\/\//i', $url)) {
+                $filtered[] = $url;
+            }
+        }
+
+        return array_values(array_unique($filtered));
+    }
+
+    private function extractImageUrls($value)
+    {
+        $urls = array();
+
+        if (is_string($value)) {
+            $urls[] = $value;
+            return $urls;
+        }
+
+        if (is_array($value)) {
+            if (!empty($value['url'])) {
+                $urls[] = $value['url'];
+                return $urls;
+            }
+
+            foreach ($value as $item) {
+                if (is_string($item)) {
+                    $urls[] = $item;
+                } elseif (is_array($item)) {
+                    $urls = array_merge($urls, $this->extractImageUrls($item));
+                }
+            }
+        }
+
+        return $urls;
+    }
+
+    private function downloadImage($url)
+    {
+        $url = trim((string) $url);
+        if ($url === '') {
+            return '';
+        }
+
+        // Apply quality transformation for Prom.ua images (Default to original)
+        $quality = $this->config->get('module_prom_sync_image_quality') ?: 'original';
+        if (strpos($url, 'images.prom.ua') !== false) {
+            if ($quality === 'original') {
+                $url = preg_replace('/_w\d+_h\d+_/', '_', $url);
+            } elseif (in_array($quality, array('640', '1280'))) {
+                $url = preg_replace('/_w\d+_h\d+_/', '_w' . (int) $quality . '_h' . (int) $quality . '_', $url);
+            }
+        }
+
+        $this->logMessage('PromSync: downloading image from ' . $url);
+
+        $data = $this->fetchUrl($url, $status, $error);
+        if ($data === false || $data === '') {
+            $this->logMessage(sprintf('PromSync: image download failed for %s (error=%s, status=%d)', $url, $error, (int) $status));
+            return '';
+        }
+
+        if (function_exists('getimagesizefromstring') && function_exists('imagecreatefromstring') && function_exists('imagejpeg')) {
+            $info = @getimagesizefromstring($data);
+            if ($info && isset($info[2]) && defined('IMAGETYPE_WEBP') && $info[2] === IMAGETYPE_WEBP) {
+                $im = @imagecreatefromstring($data);
+                if ($im) {
+                    ob_start();
+                    imagejpeg($im, null, 90);
+                    $new_data = ob_get_clean();
+                    imagedestroy($im);
+                    if ($new_data) {
+                        $data = $new_data;
+                        $this->logMessage('PromSync: converted WebP to JPG for ' . $url);
+                    }
+                }
+            }
+        }
+
+        $ext = $this->guessImageExtension($url, $data);
+        $filename = 'catalog/prom_sync/' . md5($url) . '.' . $ext;
+        $full = rtrim(DIR_IMAGE, '/') . '/' . $filename;
+
+        if (!is_file($full)) {
+            $dir = dirname($full);
+            if (!is_dir($dir) && !@mkdir($dir, 0777, true)) {
+                $this->logMessage('PromSync: failed to create image dir ' . $dir);
+                return '';
+            }
+            if (@file_put_contents($full, $data) === false) {
+                $this->logMessage('PromSync: failed to write image file ' . $full);
+                return '';
+            }
+        }
+
+        return $filename;
+    }
+
+    private function fetchUrl($url, &$status = 0, &$error = '')
+    {
+        $status = 0;
+        $error = '';
+        if (!function_exists('curl_init')) {
+            $data = @file_get_contents($url);
+            return $data;
+        }
+        $data = $this->curlGet($url, true, $status, $error);
+        if ($data === false) {
+            $data = $this->curlGet($url, false, $status, $error);
+        }
+        return $data;
+    }
+
+    private function curlGet($url, $verify_ssl, &$status = 0, &$error = '')
+    {
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, $verify_ssl ? 1 : 0);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, $verify_ssl ? 2 : 0);
+        $data = curl_exec($ch);
+        $error = curl_error($ch);
+        $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        if ($data === false || $status >= 400)
+            return false;
+        return $data;
+    }
+
+    private function guessImageExtension($url, $data = null)
+    {
+        if ($data !== null && function_exists('getimagesizefromstring')) {
+            $info = @getimagesizefromstring($data);
+            if ($info && isset($info[2])) {
+                switch ($info[2]) {
+                    case IMAGETYPE_JPEG:
+                        return 'jpg';
+                    case IMAGETYPE_PNG:
+                        return 'png';
+                    case IMAGETYPE_WEBP:
+                        return 'webp';
+                }
+            }
+        }
+        $path = parse_url($url, PHP_URL_PATH);
+        $ext = strtolower(pathinfo((string) $path, PATHINFO_EXTENSION));
+        return $ext ?: 'jpg';
     }
 
     private function getApi()

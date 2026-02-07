@@ -68,6 +68,8 @@ class ControllerExtensionModulePromSync extends Controller
         $data['entry_map_quantity'] = $this->language->get('entry_map_quantity');
         $data['entry_map_sku'] = $this->language->get('entry_map_sku');
         $data['entry_map_images'] = $this->language->get('entry_map_images');
+        $data['entry_image_quality'] = $this->language->get('entry_image_quality');
+        $data['help_image_quality'] = $this->language->get('help_image_quality');
         $data['entry_push_stock'] = $this->language->get('entry_push_stock');
         $data['entry_pull_orders'] = $this->language->get('entry_pull_orders');
         $data['entry_match_by_sku'] = $this->language->get('entry_match_by_sku');
@@ -144,6 +146,7 @@ class ControllerExtensionModulePromSync extends Controller
         $data['module_prom_sync_map_quantity'] = $this->getConfigValue('module_prom_sync_map_quantity', 1);
         $data['module_prom_sync_map_sku'] = $this->getConfigValue('module_prom_sync_map_sku', 1);
         $data['module_prom_sync_map_images'] = $this->getConfigValue('module_prom_sync_map_images', 1);
+        $data['module_prom_sync_image_quality'] = $this->getConfigValue('module_prom_sync_image_quality', 'original');
         $data['module_prom_sync_push_stock'] = $this->getConfigValue('module_prom_sync_push_stock', 1);
         $data['module_prom_sync_pull_orders'] = $this->getConfigValue('module_prom_sync_pull_orders', 1);
         $data['module_prom_sync_match_by_sku'] = $this->getConfigValue('module_prom_sync_match_by_sku', 1);
